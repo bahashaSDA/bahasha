@@ -179,13 +179,21 @@ export const isTest = env.NODE_ENV === 'test';
  * Whether the MPESA settlement path is usable. When false (dev without Daraja
  * keys yet), ingest still verifies and records contributions but the STK Push
  * step is skipped with a clear, logged reason instead of crashing.
+ *
+ * A value must be present AND not a leftover .env.example placeholder — an
+ * unset key and a "changeme-…" key are equally unusable, and treating the
+ * placeholder as configured makes ingest attempt a doomed OAuth call against
+ * Safaricom on every contribution.
  */
+const isRealValue = (v: string | undefined): boolean =>
+  Boolean(v) && !/^(changeme|placeholder|your[-_]|xxx|todo)/i.test(v!);
+
 export const isDarajaConfigured =
-  Boolean(env.DARAJA_CONSUMER_KEY) &&
-  Boolean(env.DARAJA_CONSUMER_SECRET) &&
-  Boolean(env.DARAJA_PASSKEY) &&
-  Boolean(env.DARAJA_SHORTCODE) &&
-  Boolean(env.DARAJA_CALLBACK_URL);
+  isRealValue(env.DARAJA_CONSUMER_KEY) &&
+  isRealValue(env.DARAJA_CONSUMER_SECRET) &&
+  isRealValue(env.DARAJA_PASSKEY) &&
+  isRealValue(env.DARAJA_SHORTCODE) &&
+  isRealValue(env.DARAJA_CALLBACK_URL);
 
 /** Daraja base URL derived from DARAJA_ENV so it can never drift out of sync. */
 export const darajaBaseUrl =
