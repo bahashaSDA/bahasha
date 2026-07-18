@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode (the toggle stamps `.dark` on <html>). */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Bahasha design tokens, taken from the mobile Figma so the dashboard reads as
+ * one product with the apps: the indigo #231F4F, the light-green panel, and the
+ * three category accents. Everything else derives from these.
+ */
+:root {
+  --background: #f6f8f4;
+  --foreground: #231f4f;
+  --card: #ffffff;
+  --card-foreground: #231f4f;
+  --muted: #eef1ea;
+  --muted-foreground: #6b7280;
+  --border: #e4e7e0;
+  --ring: #231f4f;
+
+  --indigo: #231f4f;
+  --panel-green: #d1efbd;
+  --accent-green: #89d385;
+  --accent-cyan: #6cd1f0;
+  --accent-violet: #a1a1f7;
+
+  --success: #2f9e44;
+  --danger: #e03131;
+  --warning: #e8a13a;
+}
+
+.dark {
+  --background: #17152e;
+  --foreground: #edecf6;
+  --card: #211d40;
+  --card-foreground: #edecf6;
+  --muted: #2a2653;
+  --muted-foreground: #a5a2c4;
+  --border: #322d5c;
+  --ring: #a1a1f7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --color-indigo: var(--indigo);
+  --color-panel-green: var(--panel-green);
+  --color-accent-green: var(--accent-green);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-violet: var(--accent-violet);
+
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Recharts inherits currentColor for axes/grid; keep it subtle in both themes. */
+.recharts-cartesian-grid line {
+  stroke: var(--color-border);
+}
+.recharts-text {
+  fill: var(--color-muted-foreground);
+}

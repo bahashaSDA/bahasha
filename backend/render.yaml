@@ -1,0 +1,54 @@
+# Render deployment blueprint for the Bahasha backend.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Secrets are NOT defined here. Set them in the Render dashboard (or a synced
+# env group) so they never enter the repository. `sync: false` marks a variable
+# as dashboard-managed; Render will prompt for it on first deploy.
+
+services:
+  - type: web
+    name: bahasha-backend
+    runtime: node
+    plan: starter
+    region: frankfurt # closest Render region to Kenya with low latency to Safaricom
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health/live
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      - key: LOG_LEVEL
+        value: info
+      - key: DARAJA_ENV
+        value: production
+      # --- dashboard-managed secrets (never committed) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false # the Vercel dashboard origin, e.g. https://bahasha.vercel.app
+      - key: DARAJA_CONSUMER_KEY
+        sync: false
+      - key: DARAJA_CONSUMER_SECRET
+        sync: false
+      - key: DARAJA_PASSKEY
+        sync: false
+      - key: DARAJA_SHORTCODE
+        sync: false
+      - key: DARAJA_CALLBACK_URL
+        sync: false # https://bahasha-backend.onrender.com/api/v1/mpesa/callback/<secret>
+      - key: DARAJA_CALLBACK_SECRET
+        sync: false
+      - key: HUB_API_KEY_SECRET
+        sync: false
+      - key: PAYLOAD_MAX_AGE_SECONDS
+        value: "900"

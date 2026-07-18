@@ -1,0 +1,65 @@
+name: bahasha
+description: "Bahasha — offline-first church giving over Bluetooth Low Energy."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # --- State management ------------------------------------------------------
+  # Riverpod: compile-safe, testable, no BuildContext coupling for the domain.
+  flutter_riverpod: ^2.6.1
+
+  # --- Rendering -------------------------------------------------------------
+  flutter_svg: ^2.0.10+1        # exact Figma vector icons
+
+  # --- Offline-first storage -------------------------------------------------
+  # Drift (SQLite): the local source of truth. Registration, contribution
+  # outbox, history, settings, and the BLE send-queue all persist here so the
+  # app is fully usable with no connectivity.
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # --- Security --------------------------------------------------------------
+  flutter_secure_storage: ^9.2.2  # device private key stays in the platform keystore
+  cryptography: ^2.7.0            # Ed25519 signing of contribution payloads
+  uuid: ^4.5.1
+
+  # --- Connectivity / sync ---------------------------------------------------
+  dio: ^5.7.0                     # API client with retries
+  connectivity_plus: ^6.1.0       # trigger sync when the network returns
+
+  # --- Bluetooth Low Energy --------------------------------------------------
+  flutter_reactive_ble: ^5.4.0
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.20.3
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/
+
+  # Elms Sans is the Figma typeface but is licensed and not bundled here.
+  # Quicksand (SIL Open Font License) is the closest free geometric substitute
+  # and is wired through a single token (AppTypography.fontFamily). To ship the
+  # real design, drop Elms Sans .ttf files in assets/fonts/, list them below,
+  # and change that one constant — nothing else references the family directly.
+  fonts:
+    - family: BahashaSans
+      fonts:
+        - asset: assets/fonts/Quicksand.ttf

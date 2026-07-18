@@ -1,0 +1,54 @@
+# --- Secrets ------------------------------------------------------------------
+# These move real money. Never commit them.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+*.jks
+google-services.json
+service-account*.json
+
+# --- Node ---------------------------------------------------------------------
+node_modules/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+.npm/
+.eslintcache
+
+# --- Next.js ------------------------------------------------------------------
+.next/
+out/
+.vercel/
+
+# --- Flutter / Dart -----------------------------------------------------------
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+**/build/
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+local.properties
+**/android/key.properties
+**/ios/Pods/
+**/ios/.symlinks/
+
+# --- Editors / OS -------------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Local tooling ------------------------------------------------------------
+supabase/.branches/
+supabase/.temp/
+*.tmp
