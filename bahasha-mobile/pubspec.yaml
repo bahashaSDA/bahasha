@@ -41,6 +41,12 @@ dependencies:
   flutter_reactive_ble: ^5.4.0
   permission_handler: ^11.3.1
 
+  # --- Sharing ---------------------------------------------------------------
+  # Android share sheet: history can be shared to WhatsApp, Email, Drive,
+  # Telegram, Bluetooth, Nearby Share — anything the OS exposes.
+  share_plus: ^10.1.2
+  intl: ^0.20.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

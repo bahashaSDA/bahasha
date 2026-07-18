@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../../core/ble/ble_transport.dart';
+import '../../../core/providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../account/presentation/account_screen.dart';
 import '../application/basket_controller.dart';
 import '../domain/contribution_category.dart';
 import 'widgets/amount_sheet.dart';
@@ -54,7 +57,11 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
           ),
-          _SendBar(total: basket.total, enabled: !basket.isEmpty),
+          _SendBar(
+            total: basket.total,
+            enabled: !basket.isEmpty,
+            onSend: () => _send(context, ref),
+          ),
         ],
       ),
     );
@@ -65,6 +72,56 @@ class HomeScreen extends ConsumerWidget {
     final amount = await AmountSheet.show(context, category: category, initial: current);
     if (amount != null) {
       ref.read(basketProvider.notifier).setAmount(category.code, amount);
+    }
+  }
+
+  /// Commit the basket. The contribution is signed and persisted to the local
+  /// outbox FIRST (so it is never lost), then handed to the BLE transport for
+  /// delivery to a church hub. The UI confirms immediately off the durable
+  /// write; transmission proceeds and is reflected in History as it settles.
+  Future<void> _send(BuildContext context, WidgetRef ref) async {
+    final basket = ref.read(basketProvider);
+    if (basket.isEmpty) return;
+
+    // Capture the messenger before any await so no BuildContext is used across
+    // an async gap.
+    final messenger = ScaffoldMessenger.of(context);
+
+    final user = await ref.read(localDatabaseProvider).currentUser();
+    if (user == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Please complete registration first')));
+      return;
+    }
+
+    try {
+      // 1. Durable, signed write to the outbox.
+      final id = await ref
+          .read(contributionRepositoryProvider)
+          .createSigned(allocations: Map<String, int>.from(basket.amounts), user: user);
+      ref.read(basketProvider.notifier).clear();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Contribution saved. Sending to your church hub…')),
+      );
+
+      // 2. Attempt BLE delivery (fire-and-forget; the outbox retries on failure).
+      final repo = ref.read(contributionRepositoryProvider);
+      final row = await (ref.read(localDatabaseProvider).select(ref.read(localDatabaseProvider).contributions)
+            ..where((t) => t.id.equals(id)))
+          .getSingle();
+      final outcome = await BleTransport().send(payloadJson: row.allocationsJson);
+      switch (outcome) {
+        case BleSendOutcome.accepted:
+        case BleSendOutcome.duplicate:
+          await repo.updateStatus(id, 'sent');
+        case BleSendOutcome.noHubFound:
+          await repo.updateStatus(id, 'queued', failureReason: 'No church hub in range');
+        case BleSendOutcome.rejected:
+          await repo.updateStatus(id, 'failed', failureReason: 'Hub rejected the payload');
+        case BleSendOutcome.transportError:
+          await repo.updateStatus(id, 'queued', failureReason: 'Bluetooth error; will retry');
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not send: $e')));
     }
   }
 }
@@ -99,7 +156,9 @@ class _Panel extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: IconButton(
-                  onPressed: () {},
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AccountScreen()),
+                  ),
                   iconSize: 24,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints.tightFor(width: 44, height: 44),
@@ -142,17 +201,18 @@ class _Panel extends StatelessWidget {
 /// total once anything is selected and reads "Send contributions" with the
 /// circled-arrow affordance from the design.
 class _SendBar extends StatelessWidget {
-  const _SendBar({required this.total, required this.enabled});
+  const _SendBar({required this.total, required this.enabled, required this.onSend});
 
   final int total;
   final bool enabled;
+  final VoidCallback onSend;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.indigo,
       child: InkWell(
-        onTap: enabled ? () {} : null,
+        onTap: enabled ? onSend : null,
         child: SafeArea(
           top: false,
           child: Padding(
