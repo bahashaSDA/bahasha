@@ -16,6 +16,22 @@ import { asyncHandler } from '../middleware/async-handler.js';
 
 export const healthRouter = Router();
 
+// Friendly landing at the root so opening the base URL in a browser shows the
+// API is alive and where to go, rather than a bare 404.
+healthRouter.get('/', (_req, res) => {
+  res.json({
+    name: 'Bahasha API',
+    status: 'ok',
+    version: 'v1',
+    endpoints: {
+      health: '/health',
+      liveness: '/health/live',
+      churches: '/api/v1/churches',
+      categories: '/api/v1/categories',
+    },
+  });
+});
+
 healthRouter.get('/health/live', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
