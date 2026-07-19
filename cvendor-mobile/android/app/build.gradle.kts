@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "co.ke.bahasha.cvendor"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned to 35: the BLE peripheral stack's androidx deps require API 34+.
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -19,8 +20,9 @@ android {
         applicationId = "co.ke.bahasha.cvendor"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // minSdk 23: secure storage + BLE peripheral. Android 6+.
+        minSdk = 23
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
