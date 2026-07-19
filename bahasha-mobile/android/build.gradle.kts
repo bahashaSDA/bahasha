@@ -16,19 +16,17 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-// Force a modern compileSdk on EVERY Android module, including third-party
-// plugins (e.g. reactive_ble_mobile) that still declare an older compileSdk.
-// Their transitive androidx deps require API 34+, so without this the plugin's
-// checkReleaseAarMetadata task fails the whole build.
-subprojects {
+    // Force a modern compileSdk on EVERY Android module, including third-party
+    // plugins (e.g. reactive_ble_mobile) that still declare an older compileSdk;
+    // their androidx deps require API 34+. This afterEvaluate MUST be registered
+    // before evaluationDependsOn below forces the subproject to evaluate,
+    // otherwise Gradle throws "already evaluated".
     afterEvaluate {
         extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.apply {
             compileSdkVersion(35)
         }
     }
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
