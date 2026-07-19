@@ -17,6 +17,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useContributions, downloadCsv } from "@/lib/use-contributions";
 import { useAuth, signOut } from "@/lib/use-auth";
+import { useIsSuperAdmin } from "@/lib/use-admin";
+import { Shield } from "lucide-react";
 import { computeMetrics } from "@/lib/analytics";
 import { formatKes, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -34,6 +36,7 @@ export default function DashboardPage() {
   const { rows, source, loading } = useContributions();
   const { theme, toggle } = useTheme();
   const { email, configured } = useAuth();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const router = useRouter();
   const metrics = useMemo(() => computeMetrics(rows), [rows]);
 
@@ -60,6 +63,14 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             {source === "demo" ? <Badge variant="warning">Demo data</Badge> : <Badge variant="success">Live</Badge>}
+            {isSuperAdmin ? (
+              <button
+                onClick={() => router.push("/admin")}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo/30 bg-indigo/5 px-3 py-2 text-sm font-medium text-indigo hover:bg-indigo/10 dark:text-accent-violet"
+              >
+                <Shield className="size-4" /> Super Admin
+              </button>
+            ) : null}
             {email ? (
               <span className="hidden text-sm text-muted-foreground sm:inline">{email}</span>
             ) : null}
