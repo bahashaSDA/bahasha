@@ -11,8 +11,12 @@ import {
   Sun,
   EyeOff,
   Users,
+  LogIn,
+  LogOut,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useContributions, downloadCsv } from "@/lib/use-contributions";
+import { useAuth, signOut } from "@/lib/use-auth";
 import { computeMetrics } from "@/lib/analytics";
 import { formatKes, formatNumber } from "@/lib/utils";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -29,6 +33,8 @@ import { useTheme } from "@/components/theme-provider";
 export default function DashboardPage() {
   const { rows, source, loading } = useContributions();
   const { theme, toggle } = useTheme();
+  const { email, configured } = useAuth();
+  const router = useRouter();
   const metrics = useMemo(() => computeMetrics(rows), [rows]);
 
   const anonShare =
@@ -54,6 +60,9 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             {source === "demo" ? <Badge variant="warning">Demo data</Badge> : <Badge variant="success">Live</Badge>}
+            {email ? (
+              <span className="hidden text-sm text-muted-foreground sm:inline">{email}</span>
+            ) : null}
             <button
               onClick={() => downloadCsv(rows)}
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
@@ -67,6 +76,26 @@ export default function DashboardPage() {
             >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </button>
+            {email ? (
+              <button
+                onClick={async () => {
+                  await signOut();
+                  router.refresh();
+                }}
+                aria-label="Sign out"
+                className="grid size-9 place-items-center rounded-lg border hover:bg-muted"
+                title="Sign out"
+              >
+                <LogOut className="size-4" />
+              </button>
+            ) : configured ? (
+              <button
+                onClick={() => router.push("/login")}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                <LogIn className="size-4" /> Sign in
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
