@@ -30,14 +30,17 @@ export const logger = pino({
     ],
     censor: '[redacted]',
   },
-  ...(isProduction
-    ? {}
-    : {
+  // Pretty output only in an interactive terminal. In serverless/hosted
+  // environments (Vercel, Render, etc.) stdout is not a TTY, so we emit plain
+  // JSON — pino-pretty runs a worker thread that is unreliable in serverless.
+  ...(!isProduction && process.stdout.isTTY
+    ? {
         transport: {
           target: 'pino-pretty',
           options: { colorize: true, translateTime: 'SYS:HH:MM:ss.l', ignore: 'pid,hostname' },
         },
-      }),
+      }
+    : {}),
   base: { service: 'bahasha-backend' },
 });
 
