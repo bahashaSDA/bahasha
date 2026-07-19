@@ -1,197 +1,126 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/design/icon.dart';
+import '../../../core/design/pixel_canvas.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_typography.dart';
 import '../../history/presentation/history_screen.dart';
 import '../../customize/presentation/customize_screen.dart';
 
-/// Account & settings. Shows the giver's profile and lets them switch between
-/// Secret Giving and Give Openly. Switching affects only FUTURE giving — past
-/// contributions keep the visibility they were made under (enforced server-side
-/// by visibility_snapshot), so this can never retroactively expose prior gifts.
+/// Account screen — pixel-perfect to the Figma frame (node 231:1271). Panel-green
+/// background; "Account" title; a "Secret giving" / "Give openly" state pill; two
+/// full-width cards showing the giver's name and phone; a visibility-toggle row;
+/// and the History (green) and Customize (cyan) 80px nav bands at the bottom.
+/// Switching visibility affects only future giving (server snapshots the prior
+/// state), so past contributions are never retroactively exposed.
 class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userAsync = ref.watch(currentUserProvider);
+    final user = ref.watch(currentUserProvider).valueOrNull;
+    final secret = user?.visibility == 'secret';
+    final name = (user?.fullName ?? '').toUpperCase();
+    final phone = user?.phone ?? '';
+
+    Future<void> toggleVisibility() async {
+      await ref.read(registrationRepositoryProvider).setVisibility(secret ? 'open' : 'secret');
+      ref.invalidate(currentUserProvider);
+    }
 
     return Scaffold(
-      backgroundColor: AppColors.panelGreen,
-      appBar: AppBar(
-        backgroundColor: AppColors.panelGreen,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        title: Text('Account', style: AppTypography.title.copyWith(fontSize: 24)),
-      ),
-      body: userAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.indigo)),
-        error: (e, _) => Center(child: Text('$e', style: AppTypography.description)),
-        data: (user) {
-          if (user == null) {
-            return Center(child: Text('Not registered yet', style: AppTypography.description));
-          }
-          final secret = user.visibility == 'secret';
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-            children: <Widget>[
-              _ProfileHeader(name: user.fullName, phone: user.phone),
-              const SizedBox(height: 24),
+      backgroundColor: AppColors.indigo,
+      body: PixelCanvas(
+        background: AppColors.indigo,
+        builder: (context, px) => [
+          // Panel green up to the History band.
+          px.band(0, 752, AppColors.panelGreen),
 
-              _SectionLabel('Giving visibility'),
-              _VisibilityToggle(
-                secret: secret,
-                onChanged: (toSecret) async {
-                  await ref
-                      .read(registrationRepositoryProvider)
-                      .setVisibility(toSecret ? 'secret' : 'open');
-                  ref.invalidate(currentUserProvider);
-                },
-              ),
-              const SizedBox(height: 24),
+          // Close (menu) — dismisses back to Home.
+          px.at(356, 69, width: 24, height: 24, child: GestureDetector(
+            onTap: () => Navigator.of(context).maybePop(),
+            child: DesignIcon('x', scale: px.scale),
+          )),
 
-              _SectionLabel('More'),
-              _Tile(
-                icon: Icons.receipt_long_outlined,
-                title: 'Contribution history',
-                subtitle: 'View, share and manage your giving',
-                onTap: () => Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
-              ),
-              _Tile(
-                icon: Icons.palette_outlined,
-                title: 'Customize',
-                subtitle: 'Colours, theme and appearance',
-                onTap: () => Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => const CustomizeScreen())),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+          px.text(40, 222, 'Account', size: 32),
 
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.name, required this.phone});
-  final String name;
-  final String phone;
+          // Current-visibility pill.
+          px.at(40, 280, child: _Pill(
+            label: secret ? 'Secret giving' : 'Give openly',
+            scale: px.scale,
+            filled: secret ? AppColors.panelGreen : Colors.white,
+          )),
 
-  @override
-  Widget build(BuildContext context) {
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
-    return Row(
-      children: <Widget>[
-        Container(
-          width: 64,
-          height: 64,
-          decoration: const BoxDecoration(color: AppColors.indigo, shape: BoxShape.circle),
-          alignment: Alignment.center,
-          child: Text(initial, style: AppTypography.title.copyWith(color: Colors.white)),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(name, style: AppTypography.title.copyWith(fontSize: 22)),
-              const SizedBox(height: 2),
-              Text(phone, style: AppTypography.description.copyWith(color: AppColors.inkMuted)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
+          // Name + phone cards.
+          px.at(0, 411, width: 420, height: 94, child: _card()),
+          px.text(40, 445, name, size: 20),
+          px.at(0, 505, width: 420, height: 94, child: _card()),
+          px.text(40, 539, phone, size: 20),
 
-class _VisibilityToggle extends StatelessWidget {
-  const _VisibilityToggle({required this.secret, required this.onChanged});
-  final bool secret;
-  final ValueChanged<bool> onChanged;
+          // Visibility toggle row.
+          px.text(40, 689, secret ? 'Give openly' : 'Give secretly', size: 24),
+          px.at(356, 693, width: 24, height: 24, child: GestureDetector(
+            onTap: toggleVisibility,
+            child: DesignIcon('plus', scale: px.scale),
+          )),
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
-      padding: const EdgeInsets.all(6),
-      child: Row(
-        children: <Widget>[
-          _option('Give openly', 'Visible to your church', !secret, () => onChanged(false)),
-          _option('Secret giving', 'Hidden from church reports', secret, () => onChanged(true)),
+          // History band (green).
+          px.band(752, 80, AppColors.categoryGreen),
+          px.at(0, 752, width: 420, height: 80, child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
+            child: const SizedBox.expand(),
+          )),
+          px.text(40, 776, 'History', size: 24),
+          px.at(356, 776, width: 24, height: 24, child: DesignIcon('plus', scale: px.scale)),
+
+          // Customize band (cyan).
+          px.band(832, 80, AppColors.categoryCyan),
+          px.at(0, 832, width: 420, height: 80, child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CustomizeScreen())),
+            child: const SizedBox.expand(),
+          )),
+          px.text(40, 856, 'Customize', size: 24),
+          px.at(356, 860, width: 24, height: 24, child: DesignIcon('plus', scale: px.scale)),
         ],
       ),
     );
   }
 
-  Widget _option(String title, String sub, bool active, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-          decoration: BoxDecoration(
-            color: active ? AppColors.indigo : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: AppTypography.rowLabel.copyWith(
-                  fontSize: 16,
-                  color: active ? Colors.white : AppColors.ink,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                sub,
-                style: AppTypography.description.copyWith(
-                  fontSize: 12,
-                  color: active ? Colors.white70 : AppColors.inkMuted,
-                ),
-              ),
-            ],
-          ),
+  Widget _card() => const DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.panelGreen,
+          borderRadius: BorderRadius.all(Radius.circular(1)),
+          boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 4)],
         ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 10, left: 4),
-        child: Text(text, style: AppTypography.rowLabel.copyWith(fontSize: 15, color: AppColors.inkMuted)),
       );
 }
 
-class _Tile extends StatelessWidget {
-  const _Tile({required this.icon, required this.title, required this.subtitle, required this.onTap});
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
+/// The rounded state pill (radius 34, padding 10, soft shadow) from the design.
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, required this.scale, required this.filled});
+  final String label;
+  final double scale;
+  final Color filled;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(icon, color: AppColors.indigo),
-        title: Text(title, style: AppTypography.rowLabel.copyWith(fontSize: 16)),
-        subtitle: Text(subtitle, style: AppTypography.description.copyWith(fontSize: 13)),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.inkMuted),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      padding: EdgeInsets.all(10 * scale),
+      decoration: BoxDecoration(
+        color: filled,
+        borderRadius: BorderRadius.circular(34 * scale),
+        boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 1.5)],
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: 'BahashaSans',
+          fontWeight: FontWeight.w300,
+          fontSize: 16 * scale,
+          color: AppColors.ink,
+        ),
       ),
     );
   }

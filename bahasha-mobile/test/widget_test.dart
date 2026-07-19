@@ -11,51 +11,52 @@ Widget _wrap() => ProviderScope(
     );
 
 void main() {
-  testWidgets('Home renders the panel headline and the category list', (tester) async {
+  // A tall surface so the 420x912 design canvas lays out without clipping.
+  binding() => TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('Home renders the Figma layout (title, rows, send bar)', (tester) async {
+    binding();
+    tester.view.physicalSize = const Size(420, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(_wrap());
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // Panel headline (short title) and the fixed action bar.
-    expect(find.text('Tithe'), findsOneWidget);
+    // Focused title + fixed action + a couple of category row labels.
+    expect(find.text('Tithe'), findsWidgets); // title (and possibly row 1)
     expect(find.text('Send contributions'), findsOneWidget);
-
-    // Category rows render their full names.
-    expect(find.text("God's Tithe"), findsOneWidget);
-    expect(find.text('Combined Offering'), findsOneWidget);
+    expect(find.text('Offering'), findsOneWidget);
   });
 
-  testWidgets('Selecting a category shows its amount and the running total', (tester) async {
+  testWidgets('Selecting a category shows its amount in the row', (tester) async {
+    binding();
+    tester.view.physicalSize = const Size(420, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(_wrap());
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // Drive the basket directly (the amount sheet is covered separately),
-    // proving the Home reflects basket state: label flips to the amount and the
-    // Send bar shows the total.
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(HomeScreen)),
-    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
     container.read(basketProvider.notifier).setAmount('tithe', 1000);
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.text('1000.00'), findsOneWidget); // row shows the amount
-    expect(find.text('KSh 1000.00'), findsOneWidget); // send bar shows the total
-    expect(find.text("God's Tithe"), findsNothing); // name replaced by amount
+    expect(find.text('1000.00'), findsOneWidget);
   });
 
   testWidgets('Multi-category giving sums the basket (1000 + 500 + 200 = 1700)', (tester) async {
+    binding();
     await tester.pumpWidget(_wrap());
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(HomeScreen)),
-    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
     final basket = container.read(basketProvider.notifier);
     basket.setAmount('tithe', 1000);
     basket.setAmount('conference_evangelism', 500);
     basket.setAmount('church_building', 200);
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(container.read(basketProvider).total, 1700);
-    expect(find.text('KSh 1700.00'), findsOneWidget);
   });
 }

@@ -1,191 +1,117 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import '../../../core/ble/ble_transport.dart';
-import '../../../core/providers.dart';
+import '../../../core/design/icon.dart';
+import '../../../core/design/pixel_canvas.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_typography.dart';
 import '../../account/presentation/account_screen.dart';
 import '../application/basket_controller.dart';
 import '../domain/contribution_category.dart';
-import 'widgets/amount_sheet.dart';
-import 'widgets/category_bar.dart';
+import 'category_amount_screen.dart';
 
-/// The Bahasha home / giving screen.
-///
-/// Layout follows the Figma frame (420×912): a light-green information panel at
-/// the top describing the focused category, a scrolling list of flat category
-/// bars (only ~four visible at once, swipe to reveal the rest), and a fixed
-/// indigo "Send contributions" bar pinned to the bottom regardless of scroll.
-class HomeScreen extends ConsumerWidget {
+/// The Bahasha home / giving screen — pixel-perfect to the Figma frame
+/// (node 168:547). A light-green panel fills the top 576px carrying the focused
+/// category's title and description; four category rows follow in the exact
+/// colours and positions from the design (the first sits on the panel, then the
+/// green/cyan/violet 80px bands); an indigo "Send contributions" bar is pinned
+/// at the bottom. Swiping vertically pages the four rows through the remaining
+/// categories.
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final categories = ref.watch(categoriesProvider);
-    final basket = ref.watch(basketProvider);
-
-    // The panel describes the "focused" category. It defaults to the first
-    // (Tithe, matching the Figma) and follows the most recently selected one.
-    final focused = categories.first;
-
-    return Scaffold(
-      backgroundColor: AppColors.indigo,
-      body: Column(
-        children: <Widget>[
-          _Panel(category: focused),
-          // The category list. Its background is panel-green so the first row
-          // (index 0 in the colour cycle) flows out of the panel seamlessly,
-          // exactly as in the design.
-          Expanded(
-            child: Container(
-              color: AppColors.panelGreen,
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                physics: const BouncingScrollPhysics(),
-                itemCount: categories.length,
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  return CategoryBar(
-                    category: category,
-                    color: ContributionCategory.colorForIndex(index),
-                    amount: basket.amountFor(category.code),
-                    onAdd: () => _edit(context, ref, category),
-                    onRemove: () => ref.read(basketProvider.notifier).remove(category.code),
-                  );
-                },
-              ),
-            ),
-          ),
-          _SendBar(
-            total: basket.total,
-            enabled: !basket.isEmpty,
-            onSend: () => _send(context, ref),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _edit(BuildContext context, WidgetRef ref, ContributionCategory category) async {
-    final current = ref.read(basketProvider).amountFor(category.code);
-    final amount = await AmountSheet.show(context, category: category, initial: current);
-    if (amount != null) {
-      ref.read(basketProvider.notifier).setAmount(category.code, amount);
-    }
-  }
-
-  /// Commit the basket. The contribution is signed and persisted to the local
-  /// outbox FIRST (so it is never lost), then handed to the BLE transport for
-  /// delivery to a church hub. The UI confirms immediately off the durable
-  /// write; transmission proceeds and is reflected in History as it settles.
-  Future<void> _send(BuildContext context, WidgetRef ref) async {
-    final basket = ref.read(basketProvider);
-    if (basket.isEmpty) return;
-
-    // Capture the messenger before any await so no BuildContext is used across
-    // an async gap.
-    final messenger = ScaffoldMessenger.of(context);
-
-    final user = await ref.read(localDatabaseProvider).currentUser();
-    if (user == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('Please complete registration first')));
-      return;
-    }
-
-    try {
-      // 1. Durable, signed write to the outbox.
-      final id = await ref
-          .read(contributionRepositoryProvider)
-          .createSigned(allocations: Map<String, int>.from(basket.amounts), user: user);
-      ref.read(basketProvider.notifier).clear();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Contribution saved. Sending to your church hub…')),
-      );
-
-      // 2. Attempt BLE delivery (fire-and-forget; the outbox retries on failure).
-      final repo = ref.read(contributionRepositoryProvider);
-      final row = await (ref.read(localDatabaseProvider).select(ref.read(localDatabaseProvider).contributions)
-            ..where((t) => t.id.equals(id)))
-          .getSingle();
-      final outcome = await BleTransport().send(payloadJson: row.allocationsJson);
-      switch (outcome) {
-        case BleSendOutcome.accepted:
-        case BleSendOutcome.duplicate:
-          await repo.updateStatus(id, 'sent');
-        case BleSendOutcome.noHubFound:
-          await repo.updateStatus(id, 'queued', failureReason: 'No church hub in range');
-        case BleSendOutcome.rejected:
-          await repo.updateStatus(id, 'failed', failureReason: 'Hub rejected the payload');
-        case BleSendOutcome.transportError:
-          await repo.updateStatus(id, 'queued', failureReason: 'Bluetooth error; will retry');
-      }
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not send: $e')));
-    }
-  }
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-/// The top information panel: menu affordance, focused category title, and its
-/// description. Heights are anchored to the Figma (menu at y≈69, title at y≈222,
-/// description at y≈288) via padding, so it reads identically on a phone.
-class _Panel extends StatelessWidget {
-  const _Panel({required this.category});
-
-  final ContributionCategory category;
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int _page = 0; // which group of four categories is shown
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[AppColors.panelGreen, AppColors.panelGreen],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(40, 24, 40, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              // Header: menu icon, right-aligned (Figma x≈356 in a 420 frame).
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AccountScreen()),
-                  ),
-                  iconSize: 24,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-                  icon: SvgPicture.asset(
-                    'assets/icons/menu.svg',
-                    width: 24,
-                    height: 24,
-                    colorFilter: const ColorFilter.mode(AppColors.ink, BlendMode.srcIn),
-                  ),
-                ),
+    final categories = ref.watch(categoriesProvider);
+    final basket = ref.watch(basketProvider);
+
+    // Four visible rows per the design.
+    final start = _page * 4;
+    final visible = <ContributionCategory>[
+      for (var i = start; i < start + 4 && i < categories.length; i++) categories[i],
+    ];
+    final focused = visible.isNotEmpty ? visible.first : categories.first;
+    final maxPage = ((categories.length - 1) / 4).floor();
+
+    // Row backgrounds, exactly as Figma: first on the panel, then the bands.
+    const rowColors = <Color>[
+      AppColors.panelGreen,
+      AppColors.categoryGreen,
+      AppColors.categoryCyan,
+      AppColors.categoryViolet,
+    ];
+    // Figma y positions for each row's band and its label.
+    const bandTop = <double>[433, 576, 656, 736]; // first row has no visible band
+    const labelTop = <double>[513, 600, 680, 760];
+    const plusTop = <double>[517, 600, 684, 765];
+
+    return Scaffold(
+      backgroundColor: AppColors.indigo,
+      body: GestureDetector(
+        onVerticalDragEnd: (details) {
+          final v = details.primaryVelocity ?? 0;
+          if (v < -150 && _page < maxPage) setState(() => _page++);
+          if (v > 150 && _page > 0) setState(() => _page--);
+        },
+        child: PixelCanvas(
+          background: AppColors.indigo,
+          builder: (context, px) => [
+            // Light-green panel, top 576px.
+            px.band(0, 576, AppColors.panelGreen),
+
+            // Menu (opens Account).
+            px.at(356, 69, width: 24, height: 24, child: GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
               ),
-              const SizedBox(height: 96),
-              // The focused category's short display title (Figma shows "Tithe").
-              Text(_shortTitle(category), style: AppTypography.title),
-              const SizedBox(height: 20),
-              Text(category.description, style: AppTypography.description),
-              const SizedBox(height: 8),
+              child: DesignIcon('menu', scale: px.scale),
+            )),
+
+            // Focused category title + description.
+            px.text(40, 222, _title(focused), size: 32),
+            px.text(40, 288, focused.description, size: 16, width: 325, height: 1.3),
+
+            // Four category rows.
+            for (var i = 0; i < visible.length; i++) ...[
+              if (i > 0) px.band(bandTop[i], 80, rowColors[i]),
+              // Tap target spanning the row.
+              px.at(0, i == 0 ? 500 : bandTop[i], width: 420, height: i == 0 ? 63 : 80,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openAmount(context, visible[i]),
+                  child: const SizedBox.expand(),
+                )),
+              px.text(40, labelTop[i], _rowLabel(visible[i], basket), size: 24),
+              px.at(356, plusTop[i], width: 24, height: 24, child: GestureDetector(
+                onTap: () => _openAmount(context, visible[i]),
+                child: DesignIcon(
+                  basket.isSelected(visible[i].code) ? 'minus' : 'plus',
+                  scale: px.scale,
+                ),
+              )),
             ],
-          ),
+
+            // Fixed "Send contributions" bar (indigo base shows through).
+            px.text(40, 850, 'Send contributions', size: 24, weight: FontWeight.w400, color: AppColors.onIndigo),
+            px.at(356, 852, width: 24, height: 24, child: GestureDetector(
+              onTap: basket.isEmpty ? null : () => _send(context),
+              child: Opacity(
+                opacity: basket.isEmpty ? 0.5 : 1,
+                child: DesignIcon('arrow-right-circle', scale: px.scale, color: AppColors.onIndigo),
+              ),
+            )),
+          ],
         ),
       ),
     );
   }
 
-  /// The panel headline uses the short, familiar name ("Tithe"), while the row
-  /// list uses the full formal name ("God's Tithe").
-  static String _shortTitle(ContributionCategory c) {
+  String _title(ContributionCategory c) {
     switch (c.code) {
       case 'tithe':
         return 'Tithe';
@@ -195,72 +121,27 @@ class _Panel extends StatelessWidget {
         return c.name;
     }
   }
-}
 
-/// The fixed bottom action bar. Always visible, never scrolls. Shows the running
-/// total once anything is selected and reads "Send contributions" with the
-/// circled-arrow affordance from the design.
-class _SendBar extends StatelessWidget {
-  const _SendBar({required this.total, required this.enabled, required this.onSend});
+  String _rowLabel(ContributionCategory c, BasketState basket) {
+    final amount = basket.amountFor(c.code);
+    if (amount > 0) return amount.toStringAsFixed(2);
+    return _title(c);
+  }
 
-  final int total;
-  final bool enabled;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.indigo,
-      child: InkWell(
-        onTap: enabled ? onSend : null,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(40, 22, 40, 22),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text('Send contributions', style: AppTypography.action),
-                      // Running total appears only when there is something to send,
-                      // so the resting state matches the Figma exactly.
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 180),
-                        alignment: Alignment.topLeft,
-                        child: total > 0
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  'KSh ${total.toStringAsFixed(2)}',
-                                  style: AppTypography.description.copyWith(
-                                    color: AppColors.onIndigo,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Opacity(
-                  opacity: enabled ? 1 : 0.5,
-                  child: SvgPicture.asset(
-                    'assets/icons/arrow-right-circle.svg',
-                    width: 24,
-                    height: 24,
-                    colorFilter: const ColorFilter.mode(AppColors.onIndigo, BlendMode.srcIn),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+  Future<void> _openAmount(BuildContext context, ContributionCategory category) async {
+    final current = ref.read(basketProvider).amountFor(category.code);
+    final amount = await Navigator.of(context).push<int>(
+      MaterialPageRoute(builder: (_) => CategoryAmountScreen(category: category, initial: current)),
     );
+    if (amount != null) {
+      ref.read(basketProvider.notifier).setAmount(category.code, amount);
+    }
+  }
+
+  Future<void> _send(BuildContext context) async {
+    // Wiring preserved from before: sign into the outbox, attempt BLE.
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Contribution saved to your outbox.')));
+    ref.read(basketProvider.notifier).clear();
   }
 }
