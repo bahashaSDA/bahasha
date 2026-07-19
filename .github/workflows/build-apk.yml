@@ -44,12 +44,14 @@ jobs:
       - name: Resolve API base URL
         id: cfg
         run: |
+          # Default to the live backend so every build (tag or manual) talks to
+          # the deployed API; a workflow_dispatch input can override it.
           URL="${{ github.event.inputs.api_base_url }}"
-          if [ -n "$URL" ]; then
-            echo "dartdefine=--dart-define=API_BASE_URL=$URL" >> "$GITHUB_OUTPUT"
-          else
-            echo "dartdefine=" >> "$GITHUB_OUTPUT"
+          if [ -z "$URL" ]; then
+            URL="https://bahasha-backend.vercel.app/api/v1"
           fi
+          echo "dartdefine=--dart-define=API_BASE_URL=$URL" >> "$GITHUB_OUTPUT"
+          echo "Using API_BASE_URL=$URL"
 
       # --- Bahasha (member app) ---------------------------------------------
       - name: Build Bahasha
