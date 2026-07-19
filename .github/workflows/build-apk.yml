@@ -1,0 +1,103 @@
+name: Build Android APKs
+
+# Builds installable APKs for both Flutter apps in the cloud (GitHub's runners
+# have clean network access, unlike a firewalled local machine) and publishes
+# them to a GitHub Release so they can be downloaded straight onto a phone.
+#
+# Trigger it either way:
+#   • push a tag:      git tag v0.1.0 && git push origin v0.1.0
+#   • or manually:     Actions tab → "Build Android APKs" → Run workflow
+#
+# The optional api_base_url input bakes the deployed backend URL into the member
+# app so it can sync/settle against Render. Leave blank to build the offline-
+# capable default (the app still runs; sync just waits for a reachable backend).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Backend API base URL (e.g. https://bahasha-backend.onrender.com/api/v1)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # required to create the Release and upload assets
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve API base URL
+        id: cfg
+        run: |
+          URL="${{ github.event.inputs.api_base_url }}"
+          if [ -n "$URL" ]; then
+            echo "dartdefine=--dart-define=API_BASE_URL=$URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "dartdefine=" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Bahasha (member app) ---------------------------------------------
+      - name: Build Bahasha
+        working-directory: bahasha-mobile
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs || true
+          flutter build apk --release --split-per-abi ${{ steps.cfg.outputs.dartdefine }}
+
+      # --- CVendor (hub app) -------------------------------------------------
+      - name: Build CVendor
+        working-directory: cvendor-mobile
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs || true
+          flutter build apk --release --split-per-abi ${{ steps.cfg.outputs.dartdefine }}
+
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          cp bahasha-mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/bahasha-arm64.apk
+          cp bahasha-mobile/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/bahasha-arm32.apk
+          cp cvendor-mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/cvendor-arm64.apk
+          cp cvendor-mobile/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/cvendor-arm32.apk
+          ls -lh dist
+
+      # Uploads as workflow artifacts (always) so they're downloadable even for
+      # a manual run without a tag.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bahasha-apks
+          path: dist/*.apk
+
+      # On a tag, also publish a Release with the APKs attached — those asset
+      # URLs are the direct download links for a phone.
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+          name: Bahasha ${{ github.ref_name }}
+          body: |
+            Installable Android APKs for the Bahasha ecosystem.
+
+            - **bahasha-arm64.apk** — member app (most modern phones)
+            - **bahasha-arm32.apk** — member app (older 32-bit phones)
+            - **cvendor-arm64.apk** — church hub app (deacon device)
+
+            To install: download the arm64 APK on your phone, tap it, and allow
+            "install from unknown sources" when prompted. Most phones since ~2018
+            are arm64; if it won't install, use the arm32 build.
