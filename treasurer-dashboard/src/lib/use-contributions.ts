@@ -46,31 +46,49 @@ export function useContributions(): State {
           return;
         }
 
-        const { data, error } = await supabase
-          .from("v_church_contributions")
-          .select(
-            "id,total_amount,status,visibility_snapshot,received_at,giver_name,giver_pseudonym,membership_status",
-          )
-          .order("received_at", { ascending: false })
-          .limit(1000);
+        // Read through the SECURITY DEFINER RPC, not the view: on Supabase a
+        // plain view cannot join public.users (RLS), so the masked giver
+        // identity must come from a definer function. It already scopes rows to
+        // this treasurer's church and masks secret givers to a pseudonym.
+        const { data, error } = await supabase.rpc("get_church_contributions");
 
         if (error) throw error;
 
-        // The view does not embed category lines; fetch allocations per page in
-        // production. For the list/analytics here we hydrate categories lazily
-        // and tolerate their absence (charts that need them simply show less).
-        const rows: ContributionRow[] = (data ?? []).map((r) => ({
-          ...(r as Omit<ContributionRow, "categories">),
-          categories: [],
+        const contribs = (data ?? []) as Omit<ContributionRow, "categories">[];
+
+        // Hydrate the per-category allocation lines so the category charts show
+        // real figures. RLS lets a treasurer read allocations for their own
+        // church's contributions (allocations_read_via_parent policy).
+        const ids = contribs.map((c) => c.id);
+        const byContribution = new Map<string, { code: string; name: string; amount: number }[]>();
+        if (ids.length) {
+          const { data: allocs } = await supabase
+            .from("contribution_allocations")
+            .select("contribution_id, amount, contribution_categories(code, name)")
+            .in("contribution_id", ids);
+          for (const a of (allocs ?? []) as unknown as Array<{
+            contribution_id: string;
+            amount: number;
+            // Supabase may return the joined row as an object or a single-element array.
+            contribution_categories: { code: string; name: string } | { code: string; name: string }[] | null;
+          }>) {
+            const cat = Array.isArray(a.contribution_categories)
+              ? a.contribution_categories[0]
+              : a.contribution_categories;
+            const list = byContribution.get(a.contribution_id) ?? [];
+            list.push({ code: cat?.code ?? "", name: cat?.name ?? "", amount: Number(a.amount) });
+            byContribution.set(a.contribution_id, list);
+          }
+        }
+
+        const rows: ContributionRow[] = contribs.map((r) => ({
+          ...r,
+          categories: byContribution.get(r.id) ?? [],
         }));
 
-        if (!cancelled)
-          setState({
-            rows: rows.length ? rows : demoRows(),
-            source: rows.length ? "live" : "demo",
-            loading: false,
-            error: null,
-          });
+        // Signed in ⇒ always LIVE, even with zero rows. A real treasurer with no
+        // giving yet sees an honest empty dashboard, never fabricated demo data.
+        if (!cancelled) setState({ rows, source: "live", loading: false, error: null });
       } catch (e) {
         if (!cancelled)
           setState({
