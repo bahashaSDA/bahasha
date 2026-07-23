@@ -50,7 +50,7 @@ class ContributionCategory {
     ),
     ContributionCategory(
       code: 'local_church_budget',
-      name: 'Local Church Budget (LCB) / AEMR',
+      name: 'Local Church Budget (LCB)',
       description: 'Runs the day-to-day operations of your local church',
     ),
     ContributionCategory(

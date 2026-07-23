@@ -83,9 +83,9 @@ class _CategoryAmountScreenState extends State<CategoryAmountScreen> {
             size: 24,
             color: _amount.isEmpty ? Colors.black.withValues(alpha: 0.36) : Colors.black,
           ),
-          // Clear (×) at the right of the field.
+          // Backspace (×) at the right of the field — deletes the last digit.
           px.at(324, 488, width: 30, height: 30, child: GestureDetector(
-            onTap: () => setState(() => _amount = ''),
+            onTap: _backspace,
             child: DesignIcon('x', scale: px.scale, color: AppColors.ink),
           )),
 
@@ -107,18 +107,10 @@ class _CategoryAmountScreenState extends State<CategoryAmountScreen> {
               ),
             )),
 
-          // Backspace / confirm (⌫→ returns the amount) at bottom right.
+          // Enter (⏎) at bottom right — saves the amount and returns to Home.
           px.at(332, 830, width: 34, height: 34, child: GestureDetector(
-            onTap: _amount.isEmpty ? _confirm : _backspace,
-            onLongPress: _confirm,
+            onTap: _confirm,
             child: Center(child: DesignIcon('backspace', scale: px.scale, color: Colors.black)),
-          )),
-
-          // Full-width invisible confirm affordance: tapping the amount confirms.
-          px.at(40, 480, width: 200, height: 48, child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: _amount.isNotEmpty ? _confirm : null,
-            child: const SizedBox.expand(),
           )),
         ],
       ),

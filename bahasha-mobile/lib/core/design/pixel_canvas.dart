@@ -106,6 +106,8 @@ class Px {
     double? width,
     double height = 1.0,
     TextAlign align = TextAlign.left,
+    int? maxLines,
+    bool ellipsis = false,
   }) {
     return Positioned(
       left: left * scale,
@@ -114,6 +116,8 @@ class Px {
       child: Text(
         value,
         textAlign: align,
+        maxLines: maxLines,
+        overflow: ellipsis ? TextOverflow.ellipsis : null,
         style: TextStyle(
           fontFamily: 'BahashaSans',
           fontWeight: weight,

@@ -42,7 +42,8 @@ void main() {
     container.read(basketProvider.notifier).setAmount('tithe', 1000);
     await tester.pump();
 
-    expect(find.text('1000.00'), findsOneWidget);
+    // The row shows the category with its entered amount, e.g. "Tithe  1000.00".
+    expect(find.textContaining('1000.00'), findsOneWidget);
   });
 
   testWidgets('Multi-category giving sums the basket (1000 + 500 + 200 = 1700)', (tester) async {

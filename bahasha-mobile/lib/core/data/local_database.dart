@@ -92,6 +92,11 @@ class AppSettings extends Table {
       text().withDefault(const Constant('#D1EFBD'))();
   RealColumn get fontScale => real().withDefault(const Constant(1.0))();
 
+  /// JSON blob of the giver's custom colour choices (Customize screen):
+  /// { "background": "#RRGGBB", "send": "#RRGGBB", "category": { code: hex } }.
+  /// Null until the giver customises anything; screens fall back to defaults.
+  TextColumn get customColorsJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -121,7 +126,18 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          // v2 adds AppSettings.customColorsJson for the Customize screen.
+          if (from < 2) {
+            await m.addColumn(appSettings, appSettings.customColorsJson);
+          }
+        },
+      );
 
   /// Atomically returns the next replay counter, persisting the increment so a
   /// crash cannot reuse a value. The backend rejects any non-increasing

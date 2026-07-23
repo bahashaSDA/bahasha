@@ -2208,6 +2208,17 @@ class $AppSettingsTable extends AppSettings
     requiredDuringInsert: false,
     defaultValue: const Constant(1.0),
   );
+  static const VerificationMeta _customColorsJsonMeta = const VerificationMeta(
+    'customColorsJson',
+  );
+  @override
+  late final GeneratedColumn<String> customColorsJson = GeneratedColumn<String>(
+    'custom_colors_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2216,6 +2227,7 @@ class $AppSettingsTable extends AppSettings
     accentColor,
     backgroundColor,
     fontScale,
+    customColorsJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2271,6 +2283,15 @@ class $AppSettingsTable extends AppSettings
         fontScale.isAcceptableOrUnknown(data['font_scale']!, _fontScaleMeta),
       );
     }
+    if (data.containsKey('custom_colors_json')) {
+      context.handle(
+        _customColorsJsonMeta,
+        customColorsJson.isAcceptableOrUnknown(
+          data['custom_colors_json']!,
+          _customColorsJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2304,6 +2325,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.double,
         data['${effectivePrefix}font_scale'],
       )!,
+      customColorsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}custom_colors_json'],
+      ),
     );
   }
 
@@ -2320,6 +2345,11 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   final String accentColor;
   final String backgroundColor;
   final double fontScale;
+
+  /// JSON blob of the giver's custom colour choices (Customize screen):
+  /// { "background": "#RRGGBB", "send": "#RRGGBB", "category": { code: hex } }.
+  /// Null until the giver customises anything; screens fall back to defaults.
+  final String? customColorsJson;
   const AppSetting({
     required this.id,
     required this.mode,
@@ -2327,6 +2357,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.accentColor,
     required this.backgroundColor,
     required this.fontScale,
+    this.customColorsJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2337,6 +2368,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['accent_color'] = Variable<String>(accentColor);
     map['background_color'] = Variable<String>(backgroundColor);
     map['font_scale'] = Variable<double>(fontScale);
+    if (!nullToAbsent || customColorsJson != null) {
+      map['custom_colors_json'] = Variable<String>(customColorsJson);
+    }
     return map;
   }
 
@@ -2348,6 +2382,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       accentColor: Value(accentColor),
       backgroundColor: Value(backgroundColor),
       fontScale: Value(fontScale),
+      customColorsJson: customColorsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customColorsJson),
     );
   }
 
@@ -2363,6 +2400,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       accentColor: serializer.fromJson<String>(json['accentColor']),
       backgroundColor: serializer.fromJson<String>(json['backgroundColor']),
       fontScale: serializer.fromJson<double>(json['fontScale']),
+      customColorsJson: serializer.fromJson<String?>(json['customColorsJson']),
     );
   }
   @override
@@ -2375,6 +2413,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'accentColor': serializer.toJson<String>(accentColor),
       'backgroundColor': serializer.toJson<String>(backgroundColor),
       'fontScale': serializer.toJson<double>(fontScale),
+      'customColorsJson': serializer.toJson<String?>(customColorsJson),
     };
   }
 
@@ -2385,6 +2424,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     String? accentColor,
     String? backgroundColor,
     double? fontScale,
+    Value<String?> customColorsJson = const Value.absent(),
   }) => AppSetting(
     id: id ?? this.id,
     mode: mode ?? this.mode,
@@ -2392,6 +2432,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     accentColor: accentColor ?? this.accentColor,
     backgroundColor: backgroundColor ?? this.backgroundColor,
     fontScale: fontScale ?? this.fontScale,
+    customColorsJson: customColorsJson.present
+        ? customColorsJson.value
+        : this.customColorsJson,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -2407,6 +2450,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ? data.backgroundColor.value
           : this.backgroundColor,
       fontScale: data.fontScale.present ? data.fontScale.value : this.fontScale,
+      customColorsJson: data.customColorsJson.present
+          ? data.customColorsJson.value
+          : this.customColorsJson,
     );
   }
 
@@ -2418,7 +2464,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write('primaryColor: $primaryColor, ')
           ..write('accentColor: $accentColor, ')
           ..write('backgroundColor: $backgroundColor, ')
-          ..write('fontScale: $fontScale')
+          ..write('fontScale: $fontScale, ')
+          ..write('customColorsJson: $customColorsJson')
           ..write(')'))
         .toString();
   }
@@ -2431,6 +2478,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     accentColor,
     backgroundColor,
     fontScale,
+    customColorsJson,
   );
   @override
   bool operator ==(Object other) =>
@@ -2441,7 +2489,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.primaryColor == this.primaryColor &&
           other.accentColor == this.accentColor &&
           other.backgroundColor == this.backgroundColor &&
-          other.fontScale == this.fontScale);
+          other.fontScale == this.fontScale &&
+          other.customColorsJson == this.customColorsJson);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
@@ -2451,6 +2500,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<String> accentColor;
   final Value<String> backgroundColor;
   final Value<double> fontScale;
+  final Value<String?> customColorsJson;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.mode = const Value.absent(),
@@ -2458,6 +2508,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.accentColor = const Value.absent(),
     this.backgroundColor = const Value.absent(),
     this.fontScale = const Value.absent(),
+    this.customColorsJson = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
@@ -2466,6 +2517,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.accentColor = const Value.absent(),
     this.backgroundColor = const Value.absent(),
     this.fontScale = const Value.absent(),
+    this.customColorsJson = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
@@ -2474,6 +2526,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<String>? accentColor,
     Expression<String>? backgroundColor,
     Expression<double>? fontScale,
+    Expression<String>? customColorsJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2482,6 +2535,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (accentColor != null) 'accent_color': accentColor,
       if (backgroundColor != null) 'background_color': backgroundColor,
       if (fontScale != null) 'font_scale': fontScale,
+      if (customColorsJson != null) 'custom_colors_json': customColorsJson,
     });
   }
 
@@ -2492,6 +2546,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<String>? accentColor,
     Value<String>? backgroundColor,
     Value<double>? fontScale,
+    Value<String?>? customColorsJson,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
@@ -2500,6 +2555,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       accentColor: accentColor ?? this.accentColor,
       backgroundColor: backgroundColor ?? this.backgroundColor,
       fontScale: fontScale ?? this.fontScale,
+      customColorsJson: customColorsJson ?? this.customColorsJson,
     );
   }
 
@@ -2524,6 +2580,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (fontScale.present) {
       map['font_scale'] = Variable<double>(fontScale.value);
     }
+    if (customColorsJson.present) {
+      map['custom_colors_json'] = Variable<String>(customColorsJson.value);
+    }
     return map;
   }
 
@@ -2535,7 +2594,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('primaryColor: $primaryColor, ')
           ..write('accentColor: $accentColor, ')
           ..write('backgroundColor: $backgroundColor, ')
-          ..write('fontScale: $fontScale')
+          ..write('fontScale: $fontScale, ')
+          ..write('customColorsJson: $customColorsJson')
           ..write(')'))
         .toString();
   }
@@ -3841,6 +3901,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String> accentColor,
       Value<String> backgroundColor,
       Value<double> fontScale,
+      Value<String?> customColorsJson,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -3850,6 +3911,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String> accentColor,
       Value<String> backgroundColor,
       Value<double> fontScale,
+      Value<String?> customColorsJson,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -3888,6 +3950,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<double> get fontScale => $composableBuilder(
     column: $table.fontScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customColorsJson => $composableBuilder(
+    column: $table.customColorsJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3930,6 +3997,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.fontScale,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get customColorsJson => $composableBuilder(
+    column: $table.customColorsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -3964,6 +4036,11 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<double> get fontScale =>
       $composableBuilder(column: $table.fontScale, builder: (column) => column);
+
+  GeneratedColumn<String> get customColorsJson => $composableBuilder(
+    column: $table.customColorsJson,
+    builder: (column) => column,
+  );
 }
 
 class $$AppSettingsTableTableManager
@@ -4003,6 +4080,7 @@ class $$AppSettingsTableTableManager
                 Value<String> accentColor = const Value.absent(),
                 Value<String> backgroundColor = const Value.absent(),
                 Value<double> fontScale = const Value.absent(),
+                Value<String?> customColorsJson = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 mode: mode,
@@ -4010,6 +4088,7 @@ class $$AppSettingsTableTableManager
                 accentColor: accentColor,
                 backgroundColor: backgroundColor,
                 fontScale: fontScale,
+                customColorsJson: customColorsJson,
               ),
           createCompanionCallback:
               ({
@@ -4019,6 +4098,7 @@ class $$AppSettingsTableTableManager
                 Value<String> accentColor = const Value.absent(),
                 Value<String> backgroundColor = const Value.absent(),
                 Value<double> fontScale = const Value.absent(),
+                Value<String?> customColorsJson = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 mode: mode,
@@ -4026,6 +4106,7 @@ class $$AppSettingsTableTableManager
                 accentColor: accentColor,
                 backgroundColor: backgroundColor,
                 fontScale: fontScale,
+                customColorsJson: customColorsJson,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

@@ -4,6 +4,7 @@ import '../../../core/design/icon.dart';
 import '../../../core/design/pixel_canvas.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../customize/application/custom_theme.dart';
 import '../../history/presentation/history_screen.dart';
 import '../../customize/presentation/customize_screen.dart';
 
@@ -19,6 +20,10 @@ class AccountScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider).valueOrNull;
+    final theme = ref.watch(customThemeProvider).valueOrNull ?? CustomTheme.fallback;
+    final panel = theme.background;
+    final historyBand = theme.isAllWhite ? Colors.white : AppColors.categoryGreen;
+    final customizeBand = theme.isAllWhite ? Colors.white : AppColors.categoryCyan;
     final secret = user?.visibility == 'secret';
     final name = (user?.fullName ?? '').toUpperCase();
     final phone = user?.phone ?? '';
@@ -33,8 +38,8 @@ class AccountScreen extends ConsumerWidget {
       body: PixelCanvas(
         background: AppColors.indigo,
         builder: (context, px) => [
-          // Panel green up to the History band.
-          px.band(0, 752, AppColors.panelGreen),
+          // Panel up to the History band.
+          px.band(0, 752, panel),
 
           // Close (menu) — dismisses back to Home.
           px.at(356, 69, width: 24, height: 24, child: GestureDetector(
@@ -52,9 +57,9 @@ class AccountScreen extends ConsumerWidget {
           )),
 
           // Name + phone cards.
-          px.at(0, 411, width: 420, height: 94, child: _card()),
+          px.at(0, 411, width: 420, height: 94, child: _card(panel)),
           px.text(40, 445, name, size: 20),
-          px.at(0, 505, width: 420, height: 94, child: _card()),
+          px.at(0, 505, width: 420, height: 94, child: _card(panel)),
           px.text(40, 539, phone, size: 20),
 
           // Visibility toggle row.
@@ -65,7 +70,7 @@ class AccountScreen extends ConsumerWidget {
           )),
 
           // History band (green).
-          px.band(752, 80, AppColors.categoryGreen),
+          px.band(752, 80, historyBand),
           px.at(0, 752, width: 420, height: 80, child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
@@ -75,7 +80,7 @@ class AccountScreen extends ConsumerWidget {
           px.at(356, 776, width: 24, height: 24, child: DesignIcon('plus', scale: px.scale)),
 
           // Customize band (cyan).
-          px.band(832, 80, AppColors.categoryCyan),
+          px.band(832, 80, customizeBand),
           px.at(0, 832, width: 420, height: 80, child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CustomizeScreen())),
@@ -88,11 +93,11 @@ class AccountScreen extends ConsumerWidget {
     );
   }
 
-  Widget _card() => const DecoratedBox(
+  Widget _card(Color color) => DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.panelGreen,
-          borderRadius: BorderRadius.all(Radius.circular(1)),
-          boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 4)],
+          color: color,
+          borderRadius: const BorderRadius.all(Radius.circular(1)),
+          boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 4)],
         ),
       );
 }
