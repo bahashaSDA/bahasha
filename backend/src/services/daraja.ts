@@ -73,6 +73,10 @@ function darajaTimestamp(date = new Date()): string {
 }
 
 export interface StkPushRequest {
+  /** The receiving church's paybill/till (BusinessShortCode). */
+  shortcode: string;
+  /** The receiving paybill's Lipa Na M-Pesa Online passkey. */
+  passkey: string;
   /** Payer number in Daraja form: 2547XXXXXXXX (no '+'). */
   msisdn: string;
   /** Whole shillings. */
@@ -106,18 +110,20 @@ export async function initiateStkPush(request: StkPushRequest): Promise<StkPushR
   }
   const token = await getAccessToken();
   const timestamp = darajaTimestamp();
+  // Password + shortcode are per-church, so each contribution settles into the
+  // giver's own church paybill directly (no central aggregation).
   const password = Buffer.from(
-    `${env.DARAJA_SHORTCODE}${env.DARAJA_PASSKEY}${timestamp}`,
+    `${request.shortcode}${request.passkey}${timestamp}`,
   ).toString('base64');
 
   const body = {
-    BusinessShortCode: env.DARAJA_SHORTCODE,
+    BusinessShortCode: request.shortcode,
     Password: password,
     Timestamp: timestamp,
     TransactionType: 'CustomerPayBillOnline',
     Amount: request.amount,
     PartyA: request.msisdn,
-    PartyB: env.DARAJA_SHORTCODE,
+    PartyB: request.shortcode,
     PhoneNumber: request.msisdn,
     CallBackURL: env.DARAJA_CALLBACK_URL,
     AccountReference: request.accountReference.slice(0, 12),

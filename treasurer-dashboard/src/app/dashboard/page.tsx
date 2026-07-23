@@ -13,6 +13,7 @@ import {
   Users,
   LogIn,
   LogOut,
+  CreditCard,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useContributions, downloadCsv } from "@/lib/use-contributions";
@@ -72,7 +73,16 @@ export default function DashboardPage() {
               </button>
             ) : null}
             {email ? (
-              <span className="hidden text-sm text-muted-foreground sm:inline">{email}</span>
+              <button
+                onClick={() => router.push("/payments")}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+                title="Set up your church's MPESA paybill"
+              >
+                <CreditCard className="size-4" /> Payments
+              </button>
+            ) : null}
+            {email ? (
+              <span className="hidden text-sm text-muted-foreground lg:inline">{email}</span>
             ) : null}
             <button
               onClick={() => downloadCsv(rows)}

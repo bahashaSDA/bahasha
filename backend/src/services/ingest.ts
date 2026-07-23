@@ -34,6 +34,7 @@ import {
   type KeyAlgorithm,
 } from '../lib/crypto.js';
 import { toDarajaMsisdn } from '../lib/phone.js';
+import { decryptSecret } from '../lib/payment-crypto.js';
 import { initiateStkPush } from './daraja.js';
 import type { ContributionPayload } from '../domain/payload.js';
 
@@ -286,24 +287,36 @@ export async function ingestContribution(
   // The contribution is durably recorded. If the STK Push fails now, the record
   // still stands and can be retried; we never lose the intent to give.
 
-  // Before MPESA credentials are configured (early dev), record the
-  // contribution and leave it pending settlement rather than crashing. This
-  // lets the full BLE pipeline be exercised end-to-end before Daraja exists.
-  if (!isDarajaConfigured) {
+  // Fetch THIS church's own payment credentials so the money settles directly
+  // into their paybill. Self-service onboarding stores these per church.
+  const { data: church } = await adminDb
+    .from('churches')
+    .select('mpesa_shortcode, mpesa_passkey_encrypted')
+    .eq('id', payload.churchId)
+    .maybeSingle();
+
+  // Record the contribution and leave it pending settlement when the Daraja app
+  // isn't configured yet, or this church hasn't finished payment onboarding.
+  if (!isDarajaConfigured || !church?.mpesa_shortcode || !church?.mpesa_passkey_encrypted) {
     logger.warn(
-      { contributionId },
-      'daraja not configured; contribution recorded but STK push skipped',
+      { contributionId, church: payload.churchId },
+      'payments not fully configured; contribution recorded but STK push skipped',
     );
     return {
       status: 'accepted',
       contributionId,
       checkoutRequestId: null,
-      settlementError: 'MPESA settlement not configured; contribution is pending',
+      settlementError: church?.mpesa_shortcode
+        ? 'MPESA settlement not configured; contribution is pending'
+        : 'This church has not set up payments yet; contribution is pending',
     };
   }
 
   try {
+    const passkey = decryptSecret(church.mpesa_passkey_encrypted as string);
     const stk = await initiateStkPush({
+      shortcode: church.mpesa_shortcode as string,
+      passkey,
       msisdn: toDarajaMsisdn(payload.msisdn),
       amount: payload.totalAmount,
       accountReference: contributionId.slice(0, 12),

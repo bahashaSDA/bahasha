@@ -14,11 +14,13 @@ import { env } from './config/env.js';
 import { httpLogger, requestId } from './middleware/request-context.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { apiLimiter } from './middleware/rate-limit.js';
+import { isProduction } from './config/env.js';
 import { healthRouter } from './routes/health.js';
 import { churchesRouter } from './routes/churches.js';
 import { registrationRouter } from './routes/registration.js';
 import { ingestRouter } from './routes/ingest.js';
 import { mpesaRouter } from './routes/mpesa.js';
+import { paymentsRouter } from './routes/payments.js';
 
 export function createApp(): Express {
   const app = express();
@@ -31,7 +33,9 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false,
+      // Production: only the explicitly-listed dashboard origin(s). Development:
+      // reflect the caller's origin so the dashboard works without extra config.
+      origin: isProduction ? (env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false) : true,
       credentials: true,
     }),
   );
@@ -54,6 +58,7 @@ export function createApp(): Express {
   v1.use(registrationRouter);
   v1.use(ingestRouter);
   v1.use(mpesaRouter);
+  v1.use(paymentsRouter);
   app.use('/api/v1', v1);
 
   // Terminal handlers, in order: unmatched -> 404, everything else -> error.

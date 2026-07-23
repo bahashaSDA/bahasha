@@ -100,6 +100,13 @@ const envSchema = z
     // --- Protocol -----------------------------------------------------------
     /** HMAC key for hub API credentials. */
     HUB_API_KEY_SECRET: notPlaceholder('HUB_API_KEY_SECRET', 32),
+    /**
+     * 32-byte key (hex) that encrypts each church's MPESA passkey at rest.
+     * Optional so the app boots without payments configured; required before any
+     * church payment credential can be stored. Generate with:
+     *   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+     */
+    PAYMENT_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'PAYMENT_ENCRYPTION_KEY must be 64 hex chars (32 bytes)').optional(),
     /** How stale a device-signed payload may be before it is refused. */
     PAYLOAD_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(900),
   })
@@ -108,11 +115,11 @@ const envSchema = z
 
     // In production, the Daraja credentials are mandatory and must be real --
     // a live deployment that cannot settle money is not a valid deployment.
+    // App-level Daraja credentials. The per-church shortcode/passkey live in the
+    // database (self-service onboarding), so they are NOT required here.
     const darajaRequired: Array<[keyof typeof env, string | undefined]> = [
       ['DARAJA_CONSUMER_KEY', env.DARAJA_CONSUMER_KEY],
       ['DARAJA_CONSUMER_SECRET', env.DARAJA_CONSUMER_SECRET],
-      ['DARAJA_PASSKEY', env.DARAJA_PASSKEY],
-      ['DARAJA_SHORTCODE', env.DARAJA_SHORTCODE],
       ['DARAJA_CALLBACK_URL', env.DARAJA_CALLBACK_URL],
     ];
     for (const [key, value] of darajaRequired) {
@@ -191,8 +198,6 @@ const isRealValue = (v: string | undefined): boolean =>
 export const isDarajaConfigured =
   isRealValue(env.DARAJA_CONSUMER_KEY) &&
   isRealValue(env.DARAJA_CONSUMER_SECRET) &&
-  isRealValue(env.DARAJA_PASSKEY) &&
-  isRealValue(env.DARAJA_SHORTCODE) &&
   isRealValue(env.DARAJA_CALLBACK_URL);
 
 /** Daraja base URL derived from DARAJA_ENV so it can never drift out of sync. */
