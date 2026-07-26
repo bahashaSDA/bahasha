@@ -18,6 +18,7 @@ import { requireUser } from '../middleware/authenticate.js';
 import { authLimiter } from '../middleware/rate-limit.js';
 import { adminDb } from '../lib/supabase.js';
 import { hashHubKey, hubKeyPrefix } from '../lib/crypto.js';
+import { encryptSecret, decryptSecret, paymentEncryptionAvailable } from '../lib/payment-crypto.js';
 import { requireUuid } from '../lib/validators.js';
 import { env } from '../config/env.js';
 import { forbidden, notFound } from '../lib/errors.js';
@@ -49,14 +50,27 @@ hubsRouter.get(
 
     const { data: hub } = await adminDb
       .from('church_hubs')
-      .select('name, api_key_prefix, status, last_heartbeat_at, last_upload_at, is_active')
+      .select('name, api_key_prefix, status, last_heartbeat_at, last_upload_at, is_active, hub_api_key_encrypted')
       .eq('church_id', churchId)
       .maybeSingle();
+
+    // The full key is decrypted only here, for the authorised church owner/admin,
+    // so they can re-copy it without regenerating. Hubs created before the key
+    // was stored (or with encryption disabled) return null — regenerate to view.
+    let apiKey: string | null = null;
+    if (hub?.hub_api_key_encrypted && paymentEncryptionAvailable) {
+      try {
+        apiKey = decryptSecret(hub.hub_api_key_encrypted as string);
+      } catch {
+        apiKey = null;
+      }
+    }
 
     res.json({
       exists: Boolean(hub),
       name: hub?.name ?? null,
       keyPrefix: hub?.api_key_prefix ?? null, // first 8 chars, safe to display
+      apiKey, // full key when saved; null if it must be regenerated to view
       status: hub?.status ?? null,
       lastHeartbeatAt: hub?.last_heartbeat_at ?? null,
       lastUploadAt: hub?.last_upload_at ?? null,
@@ -91,19 +105,19 @@ hubsRouter.post(
 
     // One hub per church (unique index on church_id): upsert rotates the key.
     // Any key issued earlier stops working the moment this new digest is stored.
-    const { error } = await adminDb.from('church_hubs').upsert(
-      {
-        church_id: churchId,
-        name,
-        api_key_hash: keyHash,
-        api_key_prefix: prefix,
-        is_active: true,
-      },
-      { onConflict: 'church_id' },
-    );
+    // We also keep the key encrypted at rest so the owner can re-view it later;
+    // if encryption isn't configured, we simply don't store it (regenerate-only).
+    const row: Record<string, unknown> = {
+      church_id: churchId,
+      name,
+      api_key_hash: keyHash,
+      api_key_prefix: prefix,
+      is_active: true,
+      hub_api_key_encrypted: paymentEncryptionAvailable ? encryptSecret(key) : null,
+    };
+    const { error } = await adminDb.from('church_hubs').upsert(row, { onConflict: 'church_id' });
     if (error) throw error;
 
-    // Shown once. Only the digest is stored, so this plaintext is unrecoverable.
-    res.json({ apiKey: key, keyPrefix: prefix, name });
+    res.json({ apiKey: key, keyPrefix: prefix, name, saved: paymentEncryptionAvailable });
   }),
 );

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck, PlayCircle, BadgeCheck, Radio, KeyRound, Copy, Check } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck, PlayCircle, BadgeCheck, Radio, KeyRound, Copy, Check, Eye, EyeOff } from "lucide-react";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { apiCall } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,7 @@ interface HubStatus {
   exists: boolean;
   name: string | null;
   keyPrefix: string | null;
+  apiKey: string | null; // full saved key, re-viewable by the owner
   status: string | null;
   lastHeartbeatAt: string | null;
   lastUploadAt: string | null;
@@ -56,8 +57,9 @@ export default function PaymentsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [hub, setHub] = useState<HubStatus | null>(null);
-  const [newHubKey, setNewHubKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [justGenerated, setJustGenerated] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -105,12 +107,15 @@ export default function PaymentsPage() {
     setBusy("hub");
     setError(null);
     setNotice(null);
-    setNewHubKey(null);
     setCopied(false);
     try {
-      const r = await apiCall<{ apiKey: string }>(`/churches/${churchId}/hub/key`, { method: "POST", body: {} });
-      setNewHubKey(r.apiKey);
-      setHub(await apiCall<HubStatus>(`/churches/${churchId}/hub`).catch(() => hub));
+      const r = await apiCall<{ apiKey: string; saved: boolean }>(`/churches/${churchId}/hub/key`, { method: "POST", body: {} });
+      setShowKey(true);
+      setJustGenerated(true);
+      // Refresh from the server so the saved key + prefix persist on the card.
+      const fresh = await apiCall<HubStatus>(`/churches/${churchId}/hub`).catch(() => null);
+      // If encryption is off the server can't save it, so fall back to showing it now.
+      setHub(fresh?.apiKey ? fresh : fresh ? { ...fresh, apiKey: r.apiKey } : hub);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate hub key");
     } finally {
@@ -119,9 +124,10 @@ export default function PaymentsPage() {
   }
 
   async function copyHubKey() {
-    if (!newHubKey) return;
+    const key = hub?.apiKey;
+    if (!key) return;
     try {
-      await navigator.clipboard.writeText(newHubKey);
+      await navigator.clipboard.writeText(key);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -308,24 +314,32 @@ export default function PaymentsPage() {
               them. Generate a key, hand it to your deacon, and they paste it into CVendor to pair the device.
             </p>
 
-            {hub?.exists ? (
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
-                <span className="text-muted-foreground">Current key: <span className="font-mono text-foreground">{hub.keyPrefix}…</span></span>
-                {hub.lastHeartbeatAt ? (
-                  <span className="text-muted-foreground">Last seen: {new Date(hub.lastHeartbeatAt).toLocaleString()}</span>
-                ) : (
-                  <span className="text-muted-foreground">Not paired yet</span>
-                )}
+            {hub?.exists && hub.lastHeartbeatAt ? (
+              <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+                Last seen: {new Date(hub.lastHeartbeatAt).toLocaleString()}
+              </div>
+            ) : hub?.exists ? (
+              <div className="rounded-lg border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+                Not paired to a CVendor device yet.
               </div>
             ) : null}
 
-            {newHubKey ? (
-              <div className="space-y-2 rounded-xl border border-warning/40 bg-warning/10 p-4">
-                <p className="text-sm font-medium">Your hub key — copy it now, it is shown only once:</p>
+            {/* The saved key — always re-viewable, no more "shown once". */}
+            {hub?.apiKey ? (
+              <div className="space-y-2 rounded-xl border bg-background p-4">
+                {justGenerated ? (
+                  <p className="text-sm font-medium text-success">New key generated and saved.</p>
+                ) : (
+                  <p className="text-sm font-medium">Your saved hub key</p>
+                )}
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 select-all break-all rounded-lg border bg-background px-3 py-2 font-mono text-sm">
-                    {newHubKey}
+                  <code className="flex-1 select-all break-all rounded-lg border bg-muted/30 px-3 py-2 font-mono text-sm">
+                    {showKey ? hub.apiKey : `${hub.keyPrefix ?? "bhk_"}${"•".repeat(20)}`}
                   </code>
+                  <button onClick={() => setShowKey((v) => !v)}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted" title={showKey ? "Hide" : "Show"}>
+                    {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
                   <button onClick={copyHubKey}
                     className="inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
                     {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
@@ -333,9 +347,13 @@ export default function PaymentsPage() {
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  We store only a scrambled fingerprint — we can never show this again. If it&apos;s lost, just generate a
-                  new one (the old one stops working).
+                  Saved securely (encrypted) — come back and copy it anytime. Give it to your deacon to paste into CVendor.
                 </p>
+              </div>
+            ) : hub?.exists ? (
+              <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm">
+                This hub&apos;s key was created before keys were saved (key id <span className="font-mono">{hub.keyPrefix}…</span>).
+                Click <strong>Regenerate</strong> below to get a fresh key you can view anytime — the deacon then re-pairs CVendor.
               </div>
             ) : null}
 
