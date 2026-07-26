@@ -14,7 +14,6 @@ import { env } from './config/env.js';
 import { httpLogger, requestId } from './middleware/request-context.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { apiLimiter } from './middleware/rate-limit.js';
-import { isProduction } from './config/env.js';
 import { healthRouter } from './routes/health.js';
 import { churchesRouter } from './routes/churches.js';
 import { registrationRouter } from './routes/registration.js';
@@ -34,15 +33,13 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(
     cors({
-      // If CORS_ORIGINS is set, honour that allow-list in ANY environment (so a
-      // deployed dev-mode backend can still be locked to the dashboard origin).
-      // Only when it is unset do we fall back: reflect in dev, deny in prod.
-      origin:
-        env.CORS_ORIGINS.length > 0
-          ? env.CORS_ORIGINS
-          : isProduction
-            ? false
-            : true,
+      // If CORS_ORIGINS is set, honour that allow-list (recommended in prod: lock
+      // the API to your dashboard origin). When unset, reflect the request origin
+      // so the dashboard works out of the box. This is safe here because the API
+      // is authenticated with a Bearer token kept in the dashboard's localStorage
+      // — a cross-site page cannot read it and so cannot forge an authorised call
+      // (unlike cookie auth, which CORS/CSRF protections exist to guard).
+      origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : true,
       credentials: true,
       maxAge: 86400,
     }),
