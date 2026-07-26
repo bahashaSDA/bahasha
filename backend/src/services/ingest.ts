@@ -291,13 +291,26 @@ export async function ingestContribution(
   // into their paybill. Self-service onboarding stores these per church.
   const { data: church } = await adminDb
     .from('churches')
-    .select('mpesa_shortcode, mpesa_passkey_encrypted')
+    .select(
+      'mpesa_shortcode, mpesa_passkey_encrypted, mpesa_consumer_key_encrypted, mpesa_consumer_secret_encrypted, payments_validated',
+    )
     .eq('id', payload.churchId)
     .maybeSingle();
 
-  // Record the contribution and leave it pending settlement when the Daraja app
-  // isn't configured yet, or this church hasn't finished payment onboarding.
-  if (!isDarajaConfigured || !church?.mpesa_shortcode || !church?.mpesa_passkey_encrypted) {
+  // A church can settle only when: it has a paybill + passkey, a Daraja app to
+  // initiate with (its own — guaranteed 0% — or the platform app), AND its
+  // credentials have passed a test (payments_validated). The last check stops a
+  // mistyped key from silently failing real giving.
+  const hasOwnApp = Boolean(
+    church?.mpesa_consumer_key_encrypted && church?.mpesa_consumer_secret_encrypted,
+  );
+  const canSettle =
+    Boolean(church?.mpesa_shortcode) &&
+    Boolean(church?.mpesa_passkey_encrypted) &&
+    Boolean(church?.payments_validated) &&
+    (hasOwnApp || isDarajaConfigured);
+
+  if (!canSettle) {
     logger.warn(
       { contributionId, church: payload.churchId },
       'payments not fully configured; contribution recorded but STK push skipped',
@@ -313,10 +326,11 @@ export async function ingestContribution(
   }
 
   try {
-    const passkey = decryptSecret(church.mpesa_passkey_encrypted as string);
     const stk = await initiateStkPush({
-      shortcode: church.mpesa_shortcode as string,
-      passkey,
+      shortcode: church!.mpesa_shortcode as string,
+      passkey: decryptSecret(church!.mpesa_passkey_encrypted as string),
+      consumerKey: hasOwnApp ? decryptSecret(church!.mpesa_consumer_key_encrypted as string) : undefined,
+      consumerSecret: hasOwnApp ? decryptSecret(church!.mpesa_consumer_secret_encrypted as string) : undefined,
       msisdn: toDarajaMsisdn(payload.msisdn),
       amount: payload.totalAmount,
       accountReference: contributionId.slice(0, 12),

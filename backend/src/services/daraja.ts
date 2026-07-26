@@ -22,18 +22,26 @@ interface CachedToken {
   token: string;
   expiresAt: number; // epoch ms
 }
-let cachedToken: CachedToken | null = null;
+// Tokens are cached per credential set, so a church's own app and the platform
+// app each keep their own token rather than clobbering one another.
+const tokenCache = new Map<string, CachedToken>();
 
-async function getAccessToken(): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) {
-    return cachedToken.token;
+/**
+ * OAuth token for a Daraja app. Pass a church's own consumer key/secret to run
+ * on THEIR app (guaranteed 0% model); omit to use the platform app.
+ */
+async function getAccessToken(consumerKey?: string, consumerSecret?: string): Promise<string> {
+  const key = consumerKey ?? env.DARAJA_CONSUMER_KEY ?? '';
+  const secret = consumerSecret ?? env.DARAJA_CONSUMER_SECRET ?? '';
+  if (!key || !secret) {
+    throw new AppError('payment_provider_error', 'No Daraja API credentials available');
   }
 
-  const credentials = Buffer.from(
-    `${env.DARAJA_CONSUMER_KEY}:${env.DARAJA_CONSUMER_SECRET}`,
-  ).toString('base64');
+  const now = Date.now();
+  const cached = tokenCache.get(key);
+  if (cached && cached.expiresAt > now + 60_000) return cached.token;
 
+  const credentials = Buffer.from(`${key}:${secret}`).toString('base64');
   const res = await fetch(
     `${darajaBaseUrl}/oauth/v1/generate?grant_type=client_credentials`,
     { headers: { Authorization: `Basic ${credentials}` } },
@@ -51,8 +59,8 @@ async function getAccessToken(): Promise<string> {
   }
 
   const ttlSeconds = Number(json.expires_in ?? '3599');
-  cachedToken = { token: json.access_token, expiresAt: now + ttlSeconds * 1000 };
-  return cachedToken.token;
+  tokenCache.set(key, { token: json.access_token, expiresAt: now + ttlSeconds * 1000 });
+  return json.access_token;
 }
 
 // --- STK Push ----------------------------------------------------------------
@@ -77,6 +85,10 @@ export interface StkPushRequest {
   shortcode: string;
   /** The receiving paybill's Lipa Na M-Pesa Online passkey. */
   passkey: string;
+  /** The church's own Daraja Consumer Key (optional; else platform app). */
+  consumerKey?: string | undefined;
+  /** The church's own Daraja Consumer Secret (optional; else platform app). */
+  consumerSecret?: string | undefined;
   /** Payer number in Daraja form: 2547XXXXXXXX (no '+'). */
   msisdn: string;
   /** Whole shillings. */
@@ -103,12 +115,12 @@ export interface StkPushResult {
  * payment_provider_error so the caller can mark the attempt failed.
  */
 export async function initiateStkPush(request: StkPushRequest): Promise<StkPushResult> {
-  if (!isDarajaConfigured) {
-    // Guard so a misconfigured environment fails loudly here rather than
-    // sending a half-formed request to Safaricom.
+  const usingOwnApp = Boolean(request.consumerKey && request.consumerSecret);
+  // The platform app must be configured only when the church has no own app.
+  if (!usingOwnApp && !isDarajaConfigured) {
     throw new AppError('service_unavailable', 'MPESA settlement is not configured on this server');
   }
-  const token = await getAccessToken();
+  const token = await getAccessToken(request.consumerKey, request.consumerSecret);
   const timestamp = darajaTimestamp();
   // Password + shortcode are per-church, so each contribution settles into the
   // giver's own church paybill directly (no central aggregation).

@@ -45,7 +45,9 @@ paymentsRouter.get(
 
     const { data: church } = await adminDb
       .from('churches')
-      .select('id, name, mpesa_shortcode, mpesa_passkey_encrypted, payments_configured_at')
+      .select(
+        'id, name, mpesa_shortcode, mpesa_passkey_encrypted, mpesa_consumer_key_encrypted, mpesa_consumer_secret_encrypted, payments_configured_at, payments_validated',
+      )
       .eq('id', churchId)
       .maybeSingle();
     if (!church) throw notFound('Church not found');
@@ -54,9 +56,11 @@ paymentsRouter.get(
       churchId: church.id,
       churchName: church.name,
       shortcode: church.mpesa_shortcode ?? null,
-      // Booleans only — the encrypted passkey never leaves the server.
+      // Booleans only — encrypted secrets never leave the server.
       hasPasskey: Boolean(church.mpesa_passkey_encrypted),
+      hasOwnApp: Boolean(church.mpesa_consumer_key_encrypted && church.mpesa_consumer_secret_encrypted),
       configured: Boolean(church.mpesa_shortcode && church.mpesa_passkey_encrypted),
+      validated: Boolean(church.payments_validated),
       configuredAt: church.payments_configured_at ?? null,
     });
   }),
@@ -66,6 +70,10 @@ paymentsRouter.get(
 const configSchema = z.object({
   shortcode: z.string().regex(/^[0-9]{5,7}$/, 'Paybill/till must be 5–7 digits'),
   passkey: z.string().trim().min(20, 'The passkey looks too short').max(120),
+  // Optional: the church's OWN Daraja app (guaranteed 0% model). Both or
+  // neither; blank leaves any existing value untouched.
+  consumerKey: z.string().trim().min(8).max(120).optional(),
+  consumerSecret: z.string().trim().min(8).max(120).optional(),
 });
 
 paymentsRouter.put(
@@ -80,22 +88,29 @@ paymentsRouter.put(
       throw new AppError('service_unavailable', 'Payment setup is not enabled on this server yet');
     }
 
-    const { shortcode, passkey } = req.body as z.infer<typeof configSchema>;
+    const { shortcode, passkey, consumerKey, consumerSecret } = req.body as z.infer<typeof configSchema>;
 
     const { data: church } = await adminDb.from('churches').select('id').eq('id', churchId).maybeSingle();
     if (!church) throw notFound('Church not found');
 
-    const { error } = await adminDb
-      .from('churches')
-      .update({
-        mpesa_shortcode: shortcode,
-        mpesa_passkey_encrypted: encryptSecret(passkey),
-        payments_configured_at: new Date().toISOString(),
-      })
-      .eq('id', churchId);
+    const update: Record<string, unknown> = {
+      mpesa_shortcode: shortcode,
+      mpesa_passkey_encrypted: encryptSecret(passkey),
+      payments_configured_at: new Date().toISOString(),
+      // New/changed credentials must be re-proven with a test before real giving
+      // is settled against them.
+      payments_validated: false,
+    };
+    // Store the church's own app credentials only when BOTH are supplied.
+    if (consumerKey && consumerSecret) {
+      update.mpesa_consumer_key_encrypted = encryptSecret(consumerKey);
+      update.mpesa_consumer_secret_encrypted = encryptSecret(consumerSecret);
+    }
+
+    const { error } = await adminDb.from('churches').update(update).eq('id', churchId);
     if (error) throw error;
 
-    res.json({ churchId, shortcode, configured: true });
+    res.json({ churchId, shortcode, configured: true, hasOwnApp: Boolean(consumerKey && consumerSecret) });
   }),
 );
 
@@ -110,34 +125,45 @@ paymentsRouter.post(
   asyncHandler(async (req, res) => {
     const churchId = req.params.id!;
     assertCanManage(req, churchId);
-    if (!isDarajaConfigured) {
-      throw new AppError('service_unavailable', 'MPESA is not configured on this server yet');
-    }
 
     const msisdn = normalizeMsisdn((req.body as z.infer<typeof testSchema>).phone);
     if (!msisdn) throw badRequest('Enter a valid Kenyan mobile number');
 
     const { data: church } = await adminDb
       .from('churches')
-      .select('mpesa_shortcode, mpesa_passkey_encrypted')
+      .select(
+        'mpesa_shortcode, mpesa_passkey_encrypted, mpesa_consumer_key_encrypted, mpesa_consumer_secret_encrypted',
+      )
       .eq('id', churchId)
       .maybeSingle();
     if (!church?.mpesa_shortcode || !church?.mpesa_passkey_encrypted) {
       throw badRequest('Save your paybill and passkey first, then test');
     }
+    const hasOwnApp = Boolean(church.mpesa_consumer_key_encrypted && church.mpesa_consumer_secret_encrypted);
+    // Need a Daraja app to initiate with: the church's own, or the platform's.
+    if (!hasOwnApp && !isDarajaConfigured) {
+      throw new AppError('service_unavailable',
+        'Add your Consumer Key and Secret (or ask the admin to configure the platform MPESA app) before testing');
+    }
 
     const stk = await initiateStkPush({
       shortcode: church.mpesa_shortcode,
       passkey: decryptSecret(church.mpesa_passkey_encrypted),
+      consumerKey: hasOwnApp ? decryptSecret(church.mpesa_consumer_key_encrypted!) : undefined,
+      consumerSecret: hasOwnApp ? decryptSecret(church.mpesa_consumer_secret_encrypted!) : undefined,
       msisdn: toDarajaMsisdn(msisdn),
       amount: 1, // a 1-shilling test
       accountReference: 'BAHASHA-TEST',
       description: 'Test',
     });
 
+    // The push was accepted by Safaricom, so the credentials are valid. Mark the
+    // church's payments validated — real giving can now settle against them.
+    await adminDb.from('churches').update({ payments_validated: true }).eq('id', churchId);
+
     res.json({
       ok: true,
-      message: 'Test prompt sent — check the phone for an MPESA PIN request for KSh 1.',
+      message: 'Test prompt sent — check the phone for an MPESA PIN request for KSh 1. Your payments are now verified.',
       checkoutRequestId: stk.checkoutRequestId,
     });
   }),
