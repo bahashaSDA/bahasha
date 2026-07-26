@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck, PlayCircle, BadgeCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck, PlayCircle, BadgeCheck, Radio, KeyRound, Copy, Check } from "lucide-react";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { apiCall } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,16 @@ interface ConfigStatus {
   configured: boolean;
   validated: boolean;
   configuredAt: string | null;
+}
+
+interface HubStatus {
+  exists: boolean;
+  name: string | null;
+  keyPrefix: string | null;
+  status: string | null;
+  lastHeartbeatAt: string | null;
+  lastUploadAt: string | null;
+  active: boolean;
 }
 
 // A video guide for getting M-Pesa Daraja credentials. Swap this for a specific
@@ -41,10 +51,13 @@ export default function PaymentsPage() {
   const [consumerSecret, setConsumerSecret] = useState("");
   const [testPhone, setTestPhone] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"save" | "test" | null>(null);
+  const [busy, setBusy] = useState<"save" | "test" | "hub" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [hub, setHub] = useState<HubStatus | null>(null);
+  const [newHubKey, setNewHubKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -72,8 +85,12 @@ export default function PaymentsPage() {
       }
       setChurchId(cid);
       try {
-        const s = await apiCall<ConfigStatus>(`/churches/${cid}/payment-config`);
+        const [s, h] = await Promise.all([
+          apiCall<ConfigStatus>(`/churches/${cid}/payment-config`),
+          apiCall<HubStatus>(`/churches/${cid}/hub`).catch(() => null),
+        ]);
         setStatus(s);
+        setHub(h);
         if (s.shortcode) setShortcode(s.shortcode);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
@@ -82,6 +99,35 @@ export default function PaymentsPage() {
       }
     })();
   }, [router]);
+
+  async function generateHubKey() {
+    if (!churchId) return;
+    setBusy("hub");
+    setError(null);
+    setNotice(null);
+    setNewHubKey(null);
+    setCopied(false);
+    try {
+      const r = await apiCall<{ apiKey: string }>(`/churches/${churchId}/hub/key`, { method: "POST", body: {} });
+      setNewHubKey(r.apiKey);
+      setHub(await apiCall<HubStatus>(`/churches/${churchId}/hub`).catch(() => hub));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not generate hub key");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function copyHubKey() {
+    if (!newHubKey) return;
+    try {
+      await navigator.clipboard.writeText(newHubKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — the key is still selectable in the box */
+    }
+  }
 
   async function refresh() {
     if (!churchId) return;
@@ -240,6 +286,71 @@ export default function PaymentsPage() {
             </CardContent>
           </Card>
         ) : null}
+
+        {/* Church Hub (CVendor) — one-click key generation */}
+        <Card>
+          <CardHeader className="flex-row items-center gap-2">
+            <Radio className="size-5 text-indigo dark:text-accent-violet" />
+            <CardTitle className="text-base text-foreground">Church Hub (CVendor device)</CardTitle>
+            <div className="ml-auto">
+              {hub?.exists ? (
+                <Badge variant={hub.status === "online" ? "success" : "muted"}>
+                  {hub.status === "online" ? "Online" : "Paired"}
+                </Badge>
+              ) : (
+                <Badge variant="muted">No hub</Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The hub is the phone running <strong>CVendor</strong> that collects offerings over Bluetooth and uploads
+              them. Generate a key, hand it to your deacon, and they paste it into CVendor to pair the device.
+            </p>
+
+            {hub?.exists ? (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                <span className="text-muted-foreground">Current key: <span className="font-mono text-foreground">{hub.keyPrefix}…</span></span>
+                {hub.lastHeartbeatAt ? (
+                  <span className="text-muted-foreground">Last seen: {new Date(hub.lastHeartbeatAt).toLocaleString()}</span>
+                ) : (
+                  <span className="text-muted-foreground">Not paired yet</span>
+                )}
+              </div>
+            ) : null}
+
+            {newHubKey ? (
+              <div className="space-y-2 rounded-xl border border-warning/40 bg-warning/10 p-4">
+                <p className="text-sm font-medium">Your hub key — copy it now, it is shown only once:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 select-all break-all rounded-lg border bg-background px-3 py-2 font-mono text-sm">
+                    {newHubKey}
+                  </code>
+                  <button onClick={copyHubKey}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
+                    {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  We store only a scrambled fingerprint — we can never show this again. If it&apos;s lost, just generate a
+                  new one (the old one stops working).
+                </p>
+              </div>
+            ) : null}
+
+            <button onClick={generateHubKey} disabled={busy !== null}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+              {busy === "hub" ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+              {hub?.exists ? "Regenerate hub key" : "Generate hub key"}
+            </button>
+            {hub?.exists ? (
+              <p className="text-xs text-muted-foreground">
+                Regenerating replaces the current key — the deacon must re-pair CVendor with the new one.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
 
         {/* Guide for churches that don't have credentials yet */}
         <Card>

@@ -21,6 +21,7 @@ import { registrationRouter } from './routes/registration.js';
 import { ingestRouter } from './routes/ingest.js';
 import { mpesaRouter } from './routes/mpesa.js';
 import { paymentsRouter } from './routes/payments.js';
+import { hubsRouter } from './routes/hubs.js';
 
 export function createApp(): Express {
   const app = express();
@@ -66,6 +67,7 @@ export function createApp(): Express {
   v1.use(ingestRouter);
   v1.use(mpesaRouter);
   v1.use(paymentsRouter);
+  v1.use(hubsRouter);
   app.use('/api/v1', v1);
 
   // Terminal handlers, in order: unmatched -> 404, everything else -> error.
