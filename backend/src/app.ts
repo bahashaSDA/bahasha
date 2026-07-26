@@ -23,6 +23,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { hubsRouter } from './routes/hubs.js';
 
 export function createApp(): Express {
+  // Assembled per invocation on serverless; middleware order below is deliberate.
   const app = express();
 
   // Render (and most PaaS) put a proxy in front; trust exactly one hop so
