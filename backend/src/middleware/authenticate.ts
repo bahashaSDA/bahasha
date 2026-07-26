@@ -17,11 +17,53 @@
  */
 
 import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify, decodeProtectedHeader, type JWTPayload } from 'jose';
 import { env } from '../config/env.js';
-import { forbidden, unauthorized } from '../lib/errors.js';
+import { forbidden, unauthorized, AppError } from '../lib/errors.js';
 import { adminDb } from '../lib/supabase.js';
 import { hashHubKey, hubKeyHashEquals, isWellFormedHubKey } from '../lib/crypto.js';
+
+// Supabase issues asymmetric JWTs (ES256/RS256) signed by rotating keys exposed
+// at the project's JWKS endpoint. createRemoteJWKSet fetches and caches those
+// public keys (and re-fetches on an unknown `kid`), so verification keeps
+// working across key rotations without any redeploy. Legacy projects that still
+// mint HS256 tokens are handled by the shared-secret fallback below.
+const jwks = createRemoteJWKSet(new URL(`${env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
+
+/**
+ * Verify a Supabase access token regardless of signing scheme:
+ *   - HS256  -> shared secret (SUPABASE_JWT_SECRET), the legacy scheme.
+ *   - ES256/RS256/EdDSA -> the project's public JWKS.
+ * Returns the decoded payload, or throws for any invalid/expired token.
+ */
+async function verifySupabaseToken(token: string): Promise<JWTPayload> {
+  let alg: string | undefined;
+  try {
+    alg = decodeProtectedHeader(token).alg;
+  } catch {
+    throw unauthorized('Invalid or expired token');
+  }
+
+  if (alg === 'HS256' && !env.SUPABASE_JWT_SECRET) {
+    throw unauthorized('Dashboard authentication is not configured on this server');
+  }
+
+  try {
+    if (alg === 'HS256') {
+      const { payload } = await jwtVerify(
+        token,
+        new TextEncoder().encode(env.SUPABASE_JWT_SECRET!),
+        { algorithms: ['HS256'] },
+      );
+      return payload;
+    }
+    const { payload } = await jwtVerify(token, jwks, { algorithms: ['ES256', 'RS256', 'EdDSA'] });
+    return payload;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    throw unauthorized('Invalid or expired token');
+  }
+}
 
 // --- Types augmenting the request --------------------------------------------
 
@@ -64,18 +106,8 @@ export async function requireUser(req: Request, _res: Response, next: NextFuncti
   try {
     const token = bearerToken(req);
     if (!token) throw unauthorized('Missing bearer token');
-    if (!env.SUPABASE_JWT_SECRET) {
-      throw unauthorized('Dashboard authentication is not configured on this server');
-    }
 
-    let payload: jwt.JwtPayload;
-    try {
-      payload = jwt.verify(token, env.SUPABASE_JWT_SECRET, {
-        algorithms: ['HS256'],
-      }) as jwt.JwtPayload;
-    } catch {
-      throw unauthorized('Invalid or expired token');
-    }
+    const payload = await verifySupabaseToken(token);
 
     const sub = payload.sub;
     if (typeof sub !== 'string') throw unauthorized('Token has no subject');
