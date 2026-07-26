@@ -176,6 +176,19 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                       : Text('Continue', style: AppTypography.action.copyWith(fontSize: 18)),
                 ),
               ),
+              const SizedBox(height: 28),
+              // App credit + copyright.
+              Center(
+                child: Text(
+                  'Made by calemaley\n© 2026 Bahasha',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.description.copyWith(
+                    fontSize: 12,
+                    color: AppColors.ink.withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

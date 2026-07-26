@@ -62,6 +62,11 @@ class AccountScreen extends ConsumerWidget {
           px.at(0, 505, width: 420, height: 94, child: _card(panel)),
           px.text(40, 539, phone, size: 20),
 
+          // App credit + copyright (subtle, in the gap above the toggle).
+          px.text(0, 640, 'Made by calemaley  ·  © 2026 Bahasha', size: 11,
+              width: 420, align: TextAlign.center,
+              color: AppColors.ink.withValues(alpha: 0.4)),
+
           // Visibility toggle row.
           px.text(40, 689, secret ? 'Give openly' : 'Give secretly', size: 24),
           px.at(356, 693, width: 24, height: 24, child: GestureDetector(

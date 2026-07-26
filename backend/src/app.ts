@@ -33,10 +33,17 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(
     cors({
-      // Production: only the explicitly-listed dashboard origin(s). Development:
-      // reflect the caller's origin so the dashboard works without extra config.
-      origin: isProduction ? (env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false) : true,
+      // If CORS_ORIGINS is set, honour that allow-list in ANY environment (so a
+      // deployed dev-mode backend can still be locked to the dashboard origin).
+      // Only when it is unset do we fall back: reflect in dev, deny in prod.
+      origin:
+        env.CORS_ORIGINS.length > 0
+          ? env.CORS_ORIGINS
+          : isProduction
+            ? false
+            : true,
       credentials: true,
+      maxAge: 86400,
     }),
   );
 

@@ -1,14 +1,7 @@
-import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' show Value;
 
 import 'package:bahasha/core/data/local_database.dart';
-import 'package:bahasha/core/providers.dart';
-import 'package:bahasha/core/theme/app_theme.dart';
 import 'package:bahasha/features/history/domain/contribution_view.dart';
-import 'package:bahasha/features/history/presentation/history_screen.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

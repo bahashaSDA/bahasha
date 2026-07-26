@@ -22,6 +22,7 @@ import { normalizeMsisdn, toDarajaMsisdn } from '../lib/phone.js';
 import { initiateStkPush } from '../services/daraja.js';
 import { isDarajaConfigured } from '../config/env.js';
 import { badRequest, forbidden, notFound, AppError } from '../lib/errors.js';
+import { requireUuid } from '../lib/validators.js';
 import type { Request } from 'express';
 
 export const paymentsRouter = Router();
@@ -40,7 +41,7 @@ paymentsRouter.get(
   '/churches/:id/payment-config',
   requireUser,
   asyncHandler(async (req, res) => {
-    const churchId = req.params.id!;
+    const churchId = requireUuid(req.params.id, 'church id');
     assertCanManage(req, churchId);
 
     const { data: church } = await adminDb
@@ -82,7 +83,7 @@ paymentsRouter.put(
   authLimiter,
   validate('body', configSchema),
   asyncHandler(async (req, res) => {
-    const churchId = req.params.id!;
+    const churchId = requireUuid(req.params.id, 'church id');
     assertCanManage(req, churchId);
     if (!paymentEncryptionAvailable) {
       throw new AppError('service_unavailable', 'Payment setup is not enabled on this server yet');
@@ -123,7 +124,7 @@ paymentsRouter.post(
   authLimiter,
   validate('body', testSchema),
   asyncHandler(async (req, res) => {
-    const churchId = req.params.id!;
+    const churchId = requireUuid(req.params.id, 'church id');
     assertCanManage(req, churchId);
 
     const msisdn = normalizeMsisdn((req.body as z.infer<typeof testSchema>).phone);

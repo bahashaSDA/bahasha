@@ -12,6 +12,7 @@ import { Router } from 'express';
 import { adminDb } from '../lib/supabase.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { notFound } from '../lib/errors.js';
+import { requireUuid } from '../lib/validators.js';
 
 export const churchesRouter = Router();
 
@@ -31,7 +32,9 @@ churchesRouter.get(
 churchesRouter.get(
   '/churches/:id/categories',
   asyncHandler(async (req, res) => {
-    const churchId = req.params.id;
+    // Validate as a UUID BEFORE it reaches any query. This is what makes the
+    // .or() interpolation below injection-proof (a UUID can't carry a payload).
+    const churchId = requireUuid(req.params.id, 'church id');
 
     const { data: church } = await adminDb
       .from('churches')
