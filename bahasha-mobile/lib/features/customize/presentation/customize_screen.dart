@@ -46,15 +46,18 @@ class _CustomizeScreenState extends ConsumerState<CustomizeScreen> {
     final theme = ref.watch(customThemeProvider).valueOrNull ?? CustomTheme.fallback;
     final categories = ref.watch(categoriesProvider);
 
-    final start = _page * 4;
+    // Three category rows per page keeps the fixed "Recolour Send button" row
+    // (below) clear of the bottom gesture-nav zone so it stays tappable.
+    const perPage = 3;
+    final start = _page * perPage;
     final visible = <ContributionCategory>[
-      for (var i = start; i < start + 4 && i < categories.length; i++) categories[i],
+      for (var i = start; i < start + perPage && i < categories.length; i++) categories[i],
     ];
-    final maxPage = ((categories.length - 1) / 4).floor();
+    final maxPage = ((categories.length - 1) / perPage).floor();
 
-    const bandTop = <double>[496, 576, 656, 736];
-    const labelTop = <double>[513, 600, 680, 760];
-    const dropTop = <double>[513, 599, 679, 759];
+    const bandTop = <double>[496, 576, 656];
+    const labelTop = <double>[513, 600, 680];
+    const dropTop = <double>[513, 599, 679];
 
     final panel = theme.background;
 
@@ -86,7 +89,7 @@ class _CustomizeScreenState extends ConsumerState<CustomizeScreen> {
             _droplet(px, 351, 247, theme.background,
                 () => _pick('Background', theme.background, controller.setBackground)),
 
-            // Apply for all — whole app white. Long-press to reset to default.
+            // Apply for all — turn the whole app white.
             px.at(40, 305, child: GestureDetector(
               onTap: () async {
                 await controller.goAllWhite();
@@ -95,14 +98,20 @@ class _CustomizeScreenState extends ConsumerState<CustomizeScreen> {
                     const SnackBar(content: Text('Applied white to the whole app')));
                 }
               },
-              onLongPress: () async {
+              child: const _Pill(label: 'Apply for all', filled: true),
+            )),
+
+            // Reset — restore the original Bahasha colours (only this resets;
+            // your other choices stay put once you recolour again).
+            px.at(232, 305, child: GestureDetector(
+              onTap: () async {
                 await controller.reset();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Reset to the default Bahasha colours')));
+                    const SnackBar(content: Text('Reset to the original Bahasha colours')));
                 }
               },
-              child: const _ApplyPill(),
+              child: const _Pill(label: 'Reset', filled: false),
             )),
 
             // Category recolour rows (paged; swipe to reveal more).
@@ -114,14 +123,15 @@ class _CustomizeScreenState extends ConsumerState<CustomizeScreen> {
                       (c) => controller.setCategory(visible[i].code, c))),
             ],
 
-            // Recolour Send button (fixed).
-            px.text(40, 846, 'Recolour Send button', size: 24, weight: FontWeight.w400, color: theme.onSend),
-            _droplet(px, 351, 846, theme.send,
+            // Recolour Send button (fixed, above the bottom nav zone so it stays
+            // reachable). Recolours the Send-contributions bar on every screen.
+            px.text(40, 772, 'Recolour Send button', size: 24, weight: FontWeight.w400, color: theme.onSend),
+            _droplet(px, 351, 772, theme.send,
                 () => _pick('Send button', theme.send, controller.setSend), border: Colors.white),
 
             // Page indicator hint.
             if (maxPage > 0)
-              px.text(40, 806, 'Swipe up for more (${_page + 1}/${maxPage + 1})', size: 12, color: theme.onSend),
+              px.text(40, 466, 'Swipe up for more (${_page + 1}/${maxPage + 1})', size: 12, color: AppColors.ink),
           ],
         ),
       ),
@@ -164,19 +174,25 @@ class _CustomizeScreenState extends ConsumerState<CustomizeScreen> {
   }
 }
 
-class _ApplyPill extends StatelessWidget {
-  const _ApplyPill();
+/// A rounded action pill. [filled] renders the solid white "Apply for all"
+/// style; otherwise an outlined style used for the secondary "Reset" action.
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, required this.filled});
+  final String label;
+  final bool filled;
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: filled ? Colors.white : Colors.white.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(34),
+        border: filled ? null : Border.all(color: AppColors.ink.withValues(alpha: 0.35)),
         boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 1.5)],
       ),
-      child: const Text('Apply for all',
-          style: TextStyle(fontFamily: 'BahashaSans', fontWeight: FontWeight.w500, fontSize: 16, color: AppColors.ink)),
+      child: Text(label,
+          style: const TextStyle(fontFamily: 'BahashaSans', fontWeight: FontWeight.w500, fontSize: 16, color: AppColors.ink)),
     );
   }
 }
