@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../../core/design/icon.dart';
 import '../../../../core/design/pixel_canvas.dart';
 import '../../../../core/providers.dart';
-import '../../../account/presentation/account_screen.dart';
+import '../menu_screen.dart';
 
 /// The header shared by every offertory screen: the hamburger menu (opens the
 /// account/history/customize area), the "Offerings" wordmark, and the circular
@@ -18,7 +18,7 @@ List<Widget> offeringsHeader(BuildContext context, Px px) {
     px.at(57, 75, width: 24, height: 24, child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AccountScreen()),
+        MaterialPageRoute(builder: (_) => const MenuScreen()),
       ),
       child: DesignIcon('menu', scale: px.scale, color: Colors.black),
     )),

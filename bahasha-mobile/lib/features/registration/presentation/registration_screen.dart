@@ -3,14 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_typography.dart';
 
-/// First-time registration. Collected once; subsequent launches skip straight
-/// to Home. Everything is written locally first so registration completes with
-/// no connectivity, then syncs. The church list comes from the backend (cached)
-/// so new churches appear without an app update; a small built-in fallback keeps
-/// the picker usable on a first, never-synced launch.
+/// First-time welcome + registration, styled to match the offertory redesign:
+/// white canvas, Inter face, offertory green. Collected once; later launches go
+/// straight to Home. Written locally first so it completes offline, then syncs.
 class RegistrationScreen extends ConsumerStatefulWidget {
   const RegistrationScreen({super.key, required this.onComplete});
 
@@ -21,6 +17,10 @@ class RegistrationScreen extends ConsumerStatefulWidget {
 }
 
 class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
+  static const _green = Color(0xFF008805);
+  static const _ink = Colors.black;
+  static const _grey = Color(0xFF6B6B76);
+
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
@@ -30,8 +30,12 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   bool _anonymous = false;
   bool _submitting = false;
 
-  // Fallback church list mirrors the backend seed; replaced by the live list
-  // once fetched. Kept minimal here — the real list is server-driven.
+  // The four welcome fruits (a taste of the offertory grid).
+  static const _welcomeFruits = <String>[
+    'assets/fruits/tithe.png', 'assets/fruits/offering.png',
+    'assets/fruits/camp_budget.png', 'assets/fruits/mission.png',
+  ];
+
   static const _fallbackChurches = <({String id, String name})>[
     (id: '00000000-0000-0000-0000-000000000001', name: 'Zetech University SDA Church'),
     (id: '00000000-0000-0000-0000-000000000002', name: 'Jomo Kenyatta University SDA Church'),
@@ -65,7 +69,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
         membershipStatus: _membership,
         visibility: _anonymous ? 'secret' : 'open',
       );
-      // Sync is best-effort; local registration already lets the app proceed.
       unawaited(_trySync());
       ref.invalidate(currentUserProvider);
       widget.onComplete();
@@ -84,26 +87,39 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
       await ref.read(registrationRepositoryProvider).sync();
       ref.invalidate(currentUserProvider);
     } catch (_) {
-      // The outbox/sync service will retry when the network returns.
+      // The outbox/sync service retries when the network returns.
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.panelGreen,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+            padding: const EdgeInsets.fromLTRB(28, 28, 28, 28),
             children: <Widget>[
-              Text('Welcome to Bahasha', style: AppTypography.title),
-              const SizedBox(height: 8),
-              Text(
+              // Welcome fruit motif.
+              SizedBox(
+                height: 72,
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  for (final f in _welcomeFruits)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: SizedBox(width: 60, height: 60, child: Image.asset(f, fit: BoxFit.contain)),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 20),
+              const Text('Welcome to Bahasha',
+                  style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w300, fontSize: 28, color: _ink)),
+              const SizedBox(height: 10),
+              const Text(
                 'Give to your church effortlessly — even with mobile data off. '
                 'Tell us who you are; this is only asked once.',
-                style: AppTypography.description,
+                style: TextStyle(fontFamily: 'Inter', fontSize: 15, color: _grey, height: 1.4),
               ),
               const SizedBox(height: 28),
 
@@ -112,8 +128,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                 controller: _name,
                 hint: 'e.g. Grace Wanjiru',
                 keyboard: TextInputType.name,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Please enter your name' : null,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your name' : null,
               ),
               const SizedBox(height: 20),
 
@@ -131,7 +146,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
               DropdownButtonFormField<String>(
                 initialValue: _churchId,
                 items: _fallbackChurches
-                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontFamily: 'Inter'))))
                     .toList(),
                 onChanged: (v) => setState(() => _churchId = v),
                 decoration: _decoration('Choose your church'),
@@ -140,55 +155,45 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
               const SizedBox(height: 24),
 
               _label('Your status'),
-              _MembershipChoice(
-                value: _membership,
-                onChanged: (v) => setState(() => _membership = v),
-              ),
-              const SizedBox(height: 20),
+              _MembershipChoice(value: _membership, onChanged: (v) => setState(() => _membership = v)),
+              const SizedBox(height: 12),
 
               SwitchListTile.adaptive(
                 value: _anonymous,
                 onChanged: (v) => setState(() => _anonymous = v),
                 contentPadding: EdgeInsets.zero,
-                activeThumbColor: AppColors.indigo,
-                title: Text('Give anonymously', style: AppTypography.rowLabel.copyWith(fontSize: 18)),
-                subtitle: Text(
-                  'Your name and phone are hidden from church reports. You can change this anytime in Account.',
-                  style: AppTypography.description.copyWith(fontSize: 13),
+                activeTrackColor: _green,
+                title: const Text('Give secretly',
+                    style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w400, fontSize: 17, color: _ink)),
+                subtitle: const Text(
+                  'Your name and phone are hidden from church reports. You can change this anytime in the menu.',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: _grey, height: 1.35),
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
-              SizedBox(
-                height: 56,
-                child: FilledButton(
-                  onPressed: _submitting ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.indigo,
-                    foregroundColor: AppColors.onIndigo,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              // Green pill continue button (matches the offertory pills).
+              GestureDetector(
+                onTap: _submitting ? null : _submit,
+                child: Container(
+                  height: 56,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _green,
+                    borderRadius: BorderRadius.circular(62),
                   ),
                   child: _submitting
-                      ? const SizedBox(
-                          width: 22, height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text('Continue', style: AppTypography.action.copyWith(fontSize: 18)),
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Continue',
+                          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 18, color: Colors.white)),
                 ),
               ),
-              const SizedBox(height: 28),
-              // App credit + copyright.
-              Center(
-                child: Text(
-                  'Made by calemaley\n© 2026 Bahasha',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.description.copyWith(
-                    fontSize: 12,
-                    color: AppColors.ink.withValues(alpha: 0.45),
-                  ),
-                ),
+              const SizedBox(height: 24),
+              const Center(
+                child: Text('Made by calemaley  ·  © 2026 Bahasha',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: Color(0x73000000))),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -199,15 +204,13 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   String? _validatePhone(String? v) {
     if (v == null || v.trim().isEmpty) return 'Please enter your phone number';
     final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
-    // Accept 07.., 7.., 2547.., matching the normalisation the backend applies.
-    final ok = RegExp(r'^(0|254|\+254)?[17][0-9]{8}$').hasMatch(v.replaceAll(' ', '')) ||
-        digits.length >= 9;
+    final ok = RegExp(r'^(0|254|\+254)?[17][0-9]{8}$').hasMatch(v.replaceAll(' ', '')) || digits.length >= 9;
     return ok ? null : 'Enter a valid Kenyan mobile number';
   }
 
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(text, style: AppTypography.rowLabel.copyWith(fontSize: 16)),
+        child: Text(text, style: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 15, color: _ink)),
       );
 
   Widget _field({
@@ -222,38 +225,34 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
       keyboardType: keyboard,
       inputFormatters: formatters,
       validator: validator,
-      style: AppTypography.rowLabel.copyWith(fontSize: 18, color: AppColors.inkMuted),
+      style: const TextStyle(fontFamily: 'Inter', fontSize: 16, color: _ink),
       decoration: _decoration(hint),
     );
   }
 
   InputDecoration _decoration(String hint) => InputDecoration(
         hintText: hint,
+        hintStyle: const TextStyle(fontFamily: 'Inter', color: Color(0x80000000)),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFF5F5F7),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.indigo, width: 1.5),
+          borderSide: const BorderSide(color: _green, width: 1.5),
         ),
       );
 }
 
-/// Membership status selector: the three options from the spec.
+/// Membership status selector, in the offertory green.
 class _MembershipChoice extends StatelessWidget {
   const _MembershipChoice({required this.value, required this.onChanged});
 
   final String value;
   final ValueChanged<String> onChanged;
 
+  static const _green = Color(0xFF008805);
   static const _options = <({String id, String label})>[
     (id: 'member', label: 'Member of this church'),
     (id: 'visitor', label: 'Visitor'),
@@ -266,33 +265,24 @@ class _MembershipChoice extends StatelessWidget {
       children: _options.map((o) {
         final selected = o.id == value;
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 10),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: () => onChanged(o.id),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: selected ? AppColors.indigo : Colors.white,
+                color: selected ? _green : Colors.white,
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: selected ? _green : const Color(0x1F000000)),
               ),
-              child: Row(
-                children: <Widget>[
-                  Icon(
-                    selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    color: selected ? Colors.white : AppColors.inkMuted,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    o.label,
-                    style: AppTypography.rowLabel.copyWith(
-                      fontSize: 16,
-                      color: selected ? Colors.white : AppColors.ink,
-                    ),
-                  ),
-                ],
-              ),
+              child: Row(children: <Widget>[
+                Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                    color: selected ? Colors.white : const Color(0xFF9A9AAE), size: 22),
+                const SizedBox(width: 12),
+                Text(o.label,
+                    style: TextStyle(fontFamily: 'Inter', fontSize: 16, color: selected ? Colors.white : Colors.black)),
+              ]),
             ),
           ),
         );
