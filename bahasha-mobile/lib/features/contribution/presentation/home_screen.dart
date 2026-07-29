@@ -39,27 +39,40 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: PixelCanvas(
-        background: Colors.white,
-        scrollable: true,
-        contentHeight: 1150,
-        builder: (context, px) => [
-          ...offeringsHeader(context, px),
+      body: Stack(
+        children: [
+          PixelCanvas(
+            background: Colors.white,
+            scrollable: true,
+            // Extra tail room so the last row clears the pinned button on full scroll.
+            contentHeight: 1230,
+            builder: (context, px) => [
+              ...offeringsHeader(context, px),
 
-          px.text(66, 172,
-              firstName.isEmpty ? 'Hello, what will you give?' : 'Hello $firstName, what will you give?',
-              size: 20, weight: FontWeight.w300, color: Colors.black, fontFamily: 'Inter'),
+              px.text(66, 172,
+                  firstName.isEmpty ? 'Hello, what will you give?' : 'Hello $firstName, what will you give?',
+                  size: 20, weight: FontWeight.w300, color: Colors.black, fontFamily: 'Inter'),
 
-          for (var i = 0; i < categories.length && i < _tiles.length; i++)
-            ..._tile(context, px, categories[i], _tiles[i], basket.isSelected(categories[i].code)),
+              for (var i = 0; i < categories.length && i < _tiles.length; i++)
+                ..._tile(context, px, categories[i], _tiles[i], basket.isSelected(categories[i].code)),
+            ],
+          ),
 
-          // Floating "My offertory basket" pill (centered).
-          px.at(0, 813, width: 420, child: Center(
-            child: _BasketPill(
-              count: basket.amounts.length,
-              onTap: () => _openBasket(context, ref),
+          // "My offertory basket" stays pinned to the bottom while the grid
+          // scrolls behind it — it never rides up into the middle.
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Center(child: _BasketPill(
+                  count: basket.amounts.length,
+                  onTap: () => _openBasket(context, ref),
+                )),
+              ),
             ),
-          )),
+          ),
         ],
       ),
     );
