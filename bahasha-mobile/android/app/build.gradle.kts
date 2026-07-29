@@ -8,7 +8,7 @@ android {
     namespace = "co.ke.bahasha.bahasha"
     // Pinned: flutter_reactive_ble's transitive androidx deps (lifecycle 2.7.0
     // etc.) require compiling against API 34+. 35 is current and safe.
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -17,13 +17,13 @@ subprojects {
 }
 subprojects {
     // Force a modern compileSdk on EVERY Android module, including third-party
-    // plugins (e.g. reactive_ble_mobile) that still declare an older compileSdk;
-    // their androidx deps require API 34+. This afterEvaluate MUST be registered
-    // before evaluationDependsOn below forces the subproject to evaluate,
-    // otherwise Gradle throws "already evaluated".
+    // plugins (e.g. reactive_ble_mobile, image_picker_android) that still declare
+    // an older compileSdk; their androidx deps now require API 36. This
+    // afterEvaluate MUST be registered before evaluationDependsOn below forces the
+    // subproject to evaluate, otherwise Gradle throws "already evaluated".
     afterEvaluate {
         extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.apply {
-            compileSdkVersion(35)
+            compileSdkVersion(36)
         }
     }
     project.evaluationDependsOn(":app")

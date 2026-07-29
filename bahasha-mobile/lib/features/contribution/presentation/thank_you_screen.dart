@@ -15,6 +15,8 @@ class ThankYouScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: PixelCanvas(
         background: Colors.white,
+        scrollable: true,
+        contentHeight: 912,
         builder: (context, px) => [
           ...offeringsHeader(context, px),
 
