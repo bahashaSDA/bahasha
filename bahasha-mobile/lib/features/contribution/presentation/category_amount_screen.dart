@@ -1,118 +1,123 @@
 import 'package:flutter/material.dart';
-import '../../../core/design/icon.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/design/pixel_canvas.dart';
-import '../../../core/theme/app_colors.dart';
+import '../application/basket_controller.dart';
 import '../domain/contribution_category.dart';
+import 'widgets/offerings_header.dart';
 
-/// The category amount-entry screen — pixel-perfect to the Figma "Tithe" frame
-/// (node 200:673). Panel-green background; the category title and description at
-/// the top; a "type amount" field with a clear (×); and a custom 3×4 number pad
-/// (1–9, *, 0, ⌫) at the exact Figma positions. Tapping digits builds the
-/// amount; the arrow/back returns it to the basket.
-class CategoryAmountScreen extends StatefulWidget {
-  const CategoryAmountScreen({super.key, required this.category, this.initial = 0});
+/// The amount screen — pixel-perfect to the Figma basket frame (node 1:3). The
+/// chosen fruit sits in the offertory basket, "How much ... are you giving?"
+/// heads the screen, and the giver types an amount on the numeric keyboard.
+/// Confirming adds this giving type to the basket and returns home.
+class CategoryAmountScreen extends ConsumerStatefulWidget {
+  const CategoryAmountScreen({super.key, required this.category});
 
   final ContributionCategory category;
-  final int initial;
 
   @override
-  State<CategoryAmountScreen> createState() => _CategoryAmountScreenState();
+  ConsumerState<CategoryAmountScreen> createState() => _CategoryAmountScreenState();
 }
 
-class _CategoryAmountScreenState extends State<CategoryAmountScreen> {
-  late String _amount;
+class _CategoryAmountScreenState extends ConsumerState<CategoryAmountScreen> {
+  late final TextEditingController _controller;
 
   @override
   void initState() {
     super.initState();
-    _amount = widget.initial > 0 ? '${widget.initial}' : '';
+    final existing = ref.read(basketProvider).amountFor(widget.category.code);
+    _controller = TextEditingController(text: existing > 0 ? existing.toString() : '');
   }
 
-  void _tapDigit(String d) {
-    if (_amount.length >= 7) return;
-    setState(() => _amount = _amount == '0' ? d : _amount + d);
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
-  void _backspace() {
-    if (_amount.isEmpty) return;
-    setState(() => _amount = _amount.substring(0, _amount.length - 1));
-  }
-
-  void _confirm() => Navigator.of(context).pop(int.tryParse(_amount) ?? 0);
-
-  String _title() {
-    switch (widget.category.code) {
-      case 'tithe':
-        return 'Tithe';
-      case 'combined_offering':
-        return 'Offering';
-      default:
-        return widget.category.name;
-    }
+  void _confirm() {
+    final amount = int.tryParse(_controller.text.trim()) ?? 0;
+    ref.read(basketProvider.notifier).setAmount(widget.category.code, amount);
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Number-pad glyph → (left, top) in design pixels, from the Figma.
-    const keys = <(String, double, double)>[
-      ('1', 78, 622), ('2', 204, 622), ('3', 336, 622),
-      ('4', 75, 693), ('5', 203, 693), ('6', 336, 693),
-      ('7', 76, 764), ('8', 205, 764), ('9', 336, 764),
-      ('*', 78, 835), ('0', 203, 835),
-    ];
-
+    final c = widget.category;
     return Scaffold(
-      backgroundColor: AppColors.panelGreen,
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false,
       body: PixelCanvas(
-        background: AppColors.panelGreen,
+        background: Colors.white,
         builder: (context, px) => [
-          // Menu (back).
-          px.at(356, 69, width: 24, height: 24, child: GestureDetector(
-            onTap: () => Navigator.of(context).maybePop(),
-            child: DesignIcon('menu', scale: px.scale),
-          )),
+          ...offeringsHeader(context, px),
 
-          // Title + description (charcoal, as in Figma).
-          px.text(40, 222, _title(), size: 32, color: AppColors.inkMuted),
-          px.text(40, 288, widget.category.description, size: 16, color: AppColors.inkMuted, width: 323, height: 1.3),
+          px.text(0, 172, 'How much ${c.giveLabel} are you giving?',
+              size: 20, weight: FontWeight.w300, color: Colors.black,
+              width: 420, align: TextAlign.center, fontFamily: 'Inter'),
 
-          // Amount field: typed value or the "type amount" placeholder.
-          px.text(
-            71, 491,
-            _amount.isEmpty ? 'type amount' : _amount,
-            size: 24,
-            color: _amount.isEmpty ? Colors.black.withValues(alpha: 0.36) : Colors.black,
-          ),
-          // Backspace (×) at the right of the field — deletes the last digit.
-          px.at(324, 488, width: 30, height: 30, child: GestureDetector(
-            onTap: _backspace,
-            child: DesignIcon('x', scale: px.scale, color: AppColors.ink),
-          )),
+          // The chosen fruit, in the offertory basket.
+          px.at(90, 250, width: 240, height: 240,
+              child: Image.asset(c.asset, fit: BoxFit.contain)),
 
-          // Number pad digits/star.
-          for (final (glyph, left, top) in keys)
-            px.at(left, top, width: 40, height: 34, child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _tapDigit(glyph == '*' ? '' : glyph),
-              child: Center(
-                child: Text(
-                  glyph,
-                  style: TextStyle(
-                    fontFamily: 'BahashaSans',
-                    fontWeight: FontWeight.w300,
-                    fontSize: 24 * px.scale,
-                    color: Colors.black,
+          // Amount entry — the numeric keyboard opens automatically, matching
+          // the design. Pressing done adds it to the basket.
+          px.at(0, 600, width: 420, child: Center(
+            child: SizedBox(
+              width: 300 * px.scale,
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _confirm(),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                cursorColor: const Color(0xFF008805),
+                style: TextStyle(
+                  fontFamily: 'Inter', fontWeight: FontWeight.w300,
+                  fontSize: 28 * px.scale, color: Colors.black,
+                ),
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: 'Enter your amount',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Inter', fontWeight: FontWeight.w300,
+                    fontSize: 20 * px.scale, color: const Color(0x80000000),
                   ),
                 ),
               ),
-            )),
-
-          // Enter (⏎) at bottom right — saves the amount and returns to Home.
-          px.at(332, 830, width: 34, height: 34, child: GestureDetector(
-            onTap: _confirm,
-            child: Center(child: DesignIcon('backspace', scale: px.scale, color: Colors.black)),
+            ),
           )),
+
+          // A clear confirm affordance in addition to the keyboard's done key.
+          px.at(0, 690, width: 420, child: Center(child: _ConfirmPill(onTap: _confirm))),
         ],
+      ),
+    );
+  }
+}
+
+class _ConfirmPill extends StatelessWidget {
+  const _ConfirmPill({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.of(context).size.width / 420;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 32 * scale, vertical: 18 * scale),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(62 * scale),
+          boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 3.5, offset: Offset(0, 1))],
+        ),
+        child: Text('Add to basket',
+            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w400,
+                fontSize: 16 * scale, color: const Color(0xFF008805))),
       ),
     );
   }

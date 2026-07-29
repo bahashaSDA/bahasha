@@ -1,151 +1,140 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/design/icon.dart';
 import '../../../core/design/pixel_canvas.dart';
 import '../../../core/providers.dart';
-import '../../account/presentation/account_screen.dart';
-import '../../customize/application/custom_theme.dart';
 import '../application/basket_controller.dart';
 import '../domain/contribution_category.dart';
 import 'category_amount_screen.dart';
+import 'checkout_screen.dart';
+import 'widgets/offerings_header.dart';
 
-/// The Bahasha home / giving screen — pixel-perfect to the Figma frame
-/// (node 168:547). A panel fills the top; four category rows follow in their
-/// (customisable) band colours at the exact Figma positions; a "Send
-/// contributions" bar is pinned at the bottom. Swiping vertically pages the
-/// four rows through the remaining categories. Colours come from the giver's
-/// CustomTheme so the Customize screen genuinely recolours this screen.
-class HomeScreen extends ConsumerStatefulWidget {
+/// The Bahasha home / offertory screen — pixel-perfect to the new Figma
+/// (node 6:20). A two-column grid of fruit tiles, each a giving type; choosing a
+/// fruit opens its amount screen and adds it to the offertory basket. A floating
+/// "My offertory basket" pill opens the checkout.
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
-}
+  // Per-tile geometry, in seed order, straight from Figma: image
+  // (left, top, size) then label (left, top).
+  static const List<_Tile> _tiles = <_Tile>[
+    _Tile(56.59, 241, 145.79, 110, 384), // tithe
+    _Tile(246, 241, 143, 287, 384), // offering
+    _Tile(66.65, 442, 124.67, 73, 568), // church budget
+    _Tile(251.63, 442, 129.93, 264, 568), // camp offering
+    _Tile(66.65, 628, 124.67, 78, 754), // camp budget
+    _Tile(254.65, 628, 124.67, 289, 754), // mission
+    _Tile(76.7, 819.96, 104.95, 75, 922), // development
+    _Tile(262.05, 814, 110.95, 256, 922), // children ministry
+    _Tile(77.7, 986.96, 104.95, 78, 1089), // women ministry
+    _Tile(264.67, 987, 104.33, 265, 1089), // adventist men
+  ];
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _page = 0;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(categoriesProvider);
     final basket = ref.watch(basketProvider);
-    final theme = ref.watch(customThemeProvider).valueOrNull ?? CustomTheme.fallback;
-
-    final start = _page * 4;
-    final visible = <ContributionCategory>[
-      for (var i = start; i < start + 4 && i < categories.length; i++) categories[i],
-    ];
-    final focused = visible.isNotEmpty ? visible.first : categories.first;
-    final maxPage = ((categories.length - 1) / 4).floor();
-
-    // Row band tops (row 0 sits on the panel), exactly per Figma.
-    const bandTop = <double>[496, 576, 656, 736];
-    const labelTop = <double>[513, 600, 680, 760];
-    const plusTop = <double>[517, 600, 684, 765];
+    final user = ref.watch(currentUserProvider).valueOrNull;
+    final firstName = (user?.fullName ?? '').trim().split(' ').first;
 
     return Scaffold(
-      backgroundColor: theme.send,
-      body: GestureDetector(
-        onVerticalDragEnd: (details) {
-          final v = details.primaryVelocity ?? 0;
-          if (v < -150 && _page < maxPage) setState(() => _page++);
-          if (v > 150 && _page > 0) setState(() => _page--);
-        },
-        child: PixelCanvas(
-          background: theme.send,
-          builder: (context, px) => [
-            px.band(0, 576, theme.background),
+      backgroundColor: Colors.white,
+      body: PixelCanvas(
+        background: Colors.white,
+        scrollable: true,
+        contentHeight: 1150,
+        builder: (context, px) => [
+          ...offeringsHeader(context, px),
 
-            px.at(356, 69, width: 24, height: 24, child: GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AccountScreen()),
-              ),
-              child: DesignIcon('menu', scale: px.scale, color: theme.onBackground),
-            )),
+          px.text(66, 172,
+              firstName.isEmpty ? 'Hello, what will you give?' : 'Hello $firstName, what will you give?',
+              size: 20, weight: FontWeight.w300, color: Colors.black, fontFamily: 'Inter'),
 
-            px.text(40, 222, _title(focused), size: 32, color: theme.onBackground),
-            px.text(40, 288, focused.description, size: 16, width: 325, height: 1.3, color: theme.onBackground),
+          for (var i = 0; i < categories.length && i < _tiles.length; i++)
+            ..._tile(context, px, categories[i], _tiles[i], basket.isSelected(categories[i].code)),
 
-            for (var i = 0; i < visible.length; i++) ...[
-              px.band(bandTop[i], 80, theme.categoryColor(visible[i].code, start + i)),
-              px.at(0, bandTop[i], width: 420, height: 80, child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openAmount(context, visible[i]),
-                child: const SizedBox.expand(),
-              )),
-              px.text(40, labelTop[i], _rowLabel(visible[i], basket), size: 24, width: 290, maxLines: 1, ellipsis: true, color: theme.onBackground),
-              px.at(356, plusTop[i], width: 24, height: 24, child: GestureDetector(
-                onTap: () => _openAmount(context, visible[i]),
-                child: DesignIcon(
-                  basket.isSelected(visible[i].code) ? 'minus' : 'plus',
-                  scale: px.scale,
-                  color: theme.onBackground,
-                ),
-              )),
-            ],
-
-            px.text(40, 850, 'Send contributions', size: 24, weight: FontWeight.w400, color: theme.onSend),
-            px.at(356, 852, width: 24, height: 24, child: GestureDetector(
-              onTap: basket.isEmpty ? null : () => _send(context),
-              child: Opacity(
-                opacity: basket.isEmpty ? 0.5 : 1,
-                child: DesignIcon('arrow-right-circle', scale: px.scale, color: theme.onSend),
-              ),
-            )),
-          ],
-        ),
+          // Floating "My offertory basket" pill (centered).
+          px.at(0, 813, width: 420, child: Center(
+            child: _BasketPill(
+              count: basket.amounts.length,
+              onTap: () => _openBasket(context, ref),
+            ),
+          )),
+        ],
       ),
     );
   }
 
-  String _title(ContributionCategory c) {
-    switch (c.code) {
-      case 'tithe':
-        return 'Tithe';
-      case 'combined_offering':
-        return 'Offering';
-      default:
-        return c.name;
-    }
-  }
-
-  String _rowLabel(ContributionCategory c, BasketState basket) {
-    final amount = basket.amountFor(c.code);
-    if (amount > 0) return '${_title(c)}  ${amount.toStringAsFixed(2)}';
-    return _title(c);
+  List<Widget> _tile(BuildContext context, Px px, ContributionCategory c, _Tile t, bool selected) {
+    return [
+      px.at(t.left, t.top, width: t.size, height: t.size, child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openAmount(context, c),
+        child: Stack(children: [
+          Positioned.fill(child: Image.asset(c.asset, fit: BoxFit.contain)),
+          if (selected)
+            Positioned(right: 0, top: 0, child: Container(
+              padding: EdgeInsets.all(2 * px.scale),
+              decoration: const BoxDecoration(color: Color(0xFF008805), shape: BoxShape.circle),
+              child: Icon(Icons.check, size: 14 * px.scale, color: Colors.white),
+            )),
+        ]),
+      )),
+      px.text(t.labelLeft, t.labelTop, c.name, size: 16, weight: FontWeight.w400,
+          color: Colors.black, fontFamily: 'Inter'),
+    ];
   }
 
   Future<void> _openAmount(BuildContext context, ContributionCategory category) async {
-    final current = ref.read(basketProvider).amountFor(category.code);
-    final amount = await Navigator.of(context).push<int>(
-      MaterialPageRoute(builder: (_) => CategoryAmountScreen(category: category, initial: current)),
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CategoryAmountScreen(category: category)),
     );
-    if (amount != null) {
-      ref.read(basketProvider.notifier).setAmount(category.code, amount);
-    }
   }
 
-  /// Commit the whole basket (one or many categories) as a single signed
-  /// contribution in the local outbox, which History then reflects.
-  Future<void> _send(BuildContext context) async {
-    final basket = ref.read(basketProvider);
-    if (basket.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
-    final user = await ref.read(localDatabaseProvider).currentUser();
-    if (user == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('Please complete registration first')));
+  void _openBasket(BuildContext context, WidgetRef ref) {
+    if (ref.read(basketProvider).isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a fruit to add to your basket first')),
+      );
       return;
     }
-    try {
-      await ref.read(contributionRepositoryProvider).createSigned(
-            allocations: Map<String, int>.from(basket.amounts),
-            user: user,
-          );
-      final total = basket.total;
-      ref.read(basketProvider.notifier).clear();
-      messenger.showSnackBar(SnackBar(content: Text('Sent KSh ${total.toStringAsFixed(2)} — saved to your history')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not send: $e')));
-    }
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CheckoutScreen()));
+  }
+}
+
+class _Tile {
+  const _Tile(this.left, this.top, this.size, this.labelLeft, this.labelTop);
+  final double left, top, size, labelLeft, labelTop;
+}
+
+/// The white "My offertory basket" pill with the designed shadow and green text.
+class _BasketPill extends StatelessWidget {
+  const _BasketPill({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.of(context).size.width / 420;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 32 * scale, vertical: 20 * scale),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(62 * scale),
+          boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 3.5, offset: Offset(0, 1))],
+        ),
+        child: Text(
+          count > 0 ? 'My offertory basket ($count)' : 'My offertory basket',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w400,
+            fontSize: 16 * scale,
+            color: const Color(0xFF008805),
+          ),
+        ),
+      ),
+    );
   }
 }

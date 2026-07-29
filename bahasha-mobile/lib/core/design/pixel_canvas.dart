@@ -23,6 +23,7 @@ class PixelCanvas extends StatelessWidget {
     required this.builder,
     this.background,
     this.scrollable = false,
+    this.contentHeight,
   });
 
   /// Returns the positioned children, given a [Px] helper bound to the scale.
@@ -31,6 +32,10 @@ class PixelCanvas extends StatelessWidget {
 
   /// When the design is taller than the viewport, allow vertical scrolling.
   final bool scrollable;
+
+  /// Design height of the canvas when the frame is taller than 912 (e.g. the
+  /// scrolling fruit grid). Defaults to the standard 912 frame.
+  final double? contentHeight;
 
   static const double designWidth = 420;
   static const double designHeight = 912;
@@ -42,7 +47,7 @@ class PixelCanvas extends StatelessWidget {
         final width = constraints.maxWidth;
         final scale = width / designWidth;
         final px = Px(scale);
-        final canvasHeight = designHeight * scale;
+        final canvasHeight = (contentHeight ?? designHeight) * scale;
 
         final stack = SizedBox(
           width: width,
@@ -96,6 +101,10 @@ class Px {
   }
 
   /// Text placed at an exact design position with a design font size.
+  ///
+  /// [fontFamily] defaults to the legacy BahashaSans; the fruit/offertory
+  /// redesign passes 'Inter'. Inter is a variable font, so weight is applied
+  /// through FontVariation('wght', …) to hit the exact designed weight.
   Widget text(
     double left,
     double top,
@@ -108,7 +117,9 @@ class Px {
     TextAlign align = TextAlign.left,
     int? maxLines,
     bool ellipsis = false,
+    String fontFamily = 'BahashaSans',
   }) {
+    final isInter = fontFamily == 'Inter';
     return Positioned(
       left: left * scale,
       top: top * scale,
@@ -119,8 +130,9 @@ class Px {
         maxLines: maxLines,
         overflow: ellipsis ? TextOverflow.ellipsis : null,
         style: TextStyle(
-          fontFamily: 'BahashaSans',
+          fontFamily: fontFamily,
           fontWeight: weight,
+          fontVariations: isInter ? [FontVariation('wght', weight.value.toDouble())] : null,
           fontSize: size * scale,
           height: height,
           color: color,

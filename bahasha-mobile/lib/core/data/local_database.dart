@@ -23,6 +23,9 @@ class LocalUsers extends Table {
   TextColumn get churchId => text()();
   TextColumn get membershipStatus => text()();
   TextColumn get visibility => text().withDefault(const Constant('open'))();
+  /// Local file path of the giver's chosen profile photo (top-right avatar).
+  /// Null until they pick one; uploaded to Supabase storage when online.
+  TextColumn get avatarPath => text().nullable()();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   DateTimeColumn get registeredAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -126,7 +129,7 @@ class LocalDatabase extends _$LocalDatabase {
   LocalDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -136,8 +139,20 @@ class LocalDatabase extends _$LocalDatabase {
           if (from < 2) {
             await m.addColumn(appSettings, appSettings.customColorsJson);
           }
+          // v3 adds LocalUsers.avatarPath for the profile photo.
+          if (from < 3) {
+            await m.addColumn(localUsers, localUsers.avatarPath);
+          }
         },
       );
+
+  /// Persist the giver's chosen profile photo path.
+  Future<void> setAvatarPath(String path) async {
+    final user = await currentUser();
+    if (user == null) return;
+    await (update(localUsers)..where((t) => t.clientUuid.equals(user.clientUuid)))
+        .write(LocalUsersCompanion(avatarPath: Value(path)));
+  }
 
   /// Atomically returns the next replay counter, persisting the increment so a
   /// crash cannot reuse a value. The backend rejects any non-increasing

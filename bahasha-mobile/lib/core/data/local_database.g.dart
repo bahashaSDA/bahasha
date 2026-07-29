@@ -85,6 +85,17 @@ class $LocalUsersTable extends LocalUsers
     requiredDuringInsert: false,
     defaultValue: const Constant('open'),
   );
+  static const VerificationMeta _avatarPathMeta = const VerificationMeta(
+    'avatarPath',
+  );
+  @override
+  late final GeneratedColumn<String> avatarPath = GeneratedColumn<String>(
+    'avatar_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
   @override
   late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
@@ -119,6 +130,7 @@ class $LocalUsersTable extends LocalUsers
     churchId,
     membershipStatus,
     visibility,
+    avatarPath,
     synced,
     registeredAt,
   ];
@@ -192,6 +204,12 @@ class $LocalUsersTable extends LocalUsers
         visibility.isAcceptableOrUnknown(data['visibility']!, _visibilityMeta),
       );
     }
+    if (data.containsKey('avatar_path')) {
+      context.handle(
+        _avatarPathMeta,
+        avatarPath.isAcceptableOrUnknown(data['avatar_path']!, _avatarPathMeta),
+      );
+    }
     if (data.containsKey('synced')) {
       context.handle(
         _syncedMeta,
@@ -244,6 +262,10 @@ class $LocalUsersTable extends LocalUsers
         DriftSqlType.string,
         data['${effectivePrefix}visibility'],
       )!,
+      avatarPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}avatar_path'],
+      ),
       synced: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}synced'],
@@ -269,6 +291,10 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
   final String churchId;
   final String membershipStatus;
   final String visibility;
+
+  /// Local file path of the giver's chosen profile photo (top-right avatar).
+  /// Null until they pick one; uploaded to Supabase storage when online.
+  final String? avatarPath;
   final bool synced;
   final DateTime registeredAt;
   const LocalUser({
@@ -279,6 +305,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
     required this.churchId,
     required this.membershipStatus,
     required this.visibility,
+    this.avatarPath,
     required this.synced,
     required this.registeredAt,
   });
@@ -294,6 +321,9 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
     map['church_id'] = Variable<String>(churchId);
     map['membership_status'] = Variable<String>(membershipStatus);
     map['visibility'] = Variable<String>(visibility);
+    if (!nullToAbsent || avatarPath != null) {
+      map['avatar_path'] = Variable<String>(avatarPath);
+    }
     map['synced'] = Variable<bool>(synced);
     map['registered_at'] = Variable<DateTime>(registeredAt);
     return map;
@@ -310,6 +340,9 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
       churchId: Value(churchId),
       membershipStatus: Value(membershipStatus),
       visibility: Value(visibility),
+      avatarPath: avatarPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avatarPath),
       synced: Value(synced),
       registeredAt: Value(registeredAt),
     );
@@ -328,6 +361,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
       churchId: serializer.fromJson<String>(json['churchId']),
       membershipStatus: serializer.fromJson<String>(json['membershipStatus']),
       visibility: serializer.fromJson<String>(json['visibility']),
+      avatarPath: serializer.fromJson<String?>(json['avatarPath']),
       synced: serializer.fromJson<bool>(json['synced']),
       registeredAt: serializer.fromJson<DateTime>(json['registeredAt']),
     );
@@ -343,6 +377,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
       'churchId': serializer.toJson<String>(churchId),
       'membershipStatus': serializer.toJson<String>(membershipStatus),
       'visibility': serializer.toJson<String>(visibility),
+      'avatarPath': serializer.toJson<String?>(avatarPath),
       'synced': serializer.toJson<bool>(synced),
       'registeredAt': serializer.toJson<DateTime>(registeredAt),
     };
@@ -356,6 +391,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
     String? churchId,
     String? membershipStatus,
     String? visibility,
+    Value<String?> avatarPath = const Value.absent(),
     bool? synced,
     DateTime? registeredAt,
   }) => LocalUser(
@@ -366,6 +402,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
     churchId: churchId ?? this.churchId,
     membershipStatus: membershipStatus ?? this.membershipStatus,
     visibility: visibility ?? this.visibility,
+    avatarPath: avatarPath.present ? avatarPath.value : this.avatarPath,
     synced: synced ?? this.synced,
     registeredAt: registeredAt ?? this.registeredAt,
   );
@@ -386,6 +423,9 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
       visibility: data.visibility.present
           ? data.visibility.value
           : this.visibility,
+      avatarPath: data.avatarPath.present
+          ? data.avatarPath.value
+          : this.avatarPath,
       synced: data.synced.present ? data.synced.value : this.synced,
       registeredAt: data.registeredAt.present
           ? data.registeredAt.value
@@ -403,6 +443,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
           ..write('churchId: $churchId, ')
           ..write('membershipStatus: $membershipStatus, ')
           ..write('visibility: $visibility, ')
+          ..write('avatarPath: $avatarPath, ')
           ..write('synced: $synced, ')
           ..write('registeredAt: $registeredAt')
           ..write(')'))
@@ -418,6 +459,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
     churchId,
     membershipStatus,
     visibility,
+    avatarPath,
     synced,
     registeredAt,
   );
@@ -432,6 +474,7 @@ class LocalUser extends DataClass implements Insertable<LocalUser> {
           other.churchId == this.churchId &&
           other.membershipStatus == this.membershipStatus &&
           other.visibility == this.visibility &&
+          other.avatarPath == this.avatarPath &&
           other.synced == this.synced &&
           other.registeredAt == this.registeredAt);
 }
@@ -444,6 +487,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
   final Value<String> churchId;
   final Value<String> membershipStatus;
   final Value<String> visibility;
+  final Value<String?> avatarPath;
   final Value<bool> synced;
   final Value<DateTime> registeredAt;
   final Value<int> rowid;
@@ -455,6 +499,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
     this.churchId = const Value.absent(),
     this.membershipStatus = const Value.absent(),
     this.visibility = const Value.absent(),
+    this.avatarPath = const Value.absent(),
     this.synced = const Value.absent(),
     this.registeredAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -467,6 +512,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
     required String churchId,
     required String membershipStatus,
     this.visibility = const Value.absent(),
+    this.avatarPath = const Value.absent(),
     this.synced = const Value.absent(),
     this.registeredAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -483,6 +529,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
     Expression<String>? churchId,
     Expression<String>? membershipStatus,
     Expression<String>? visibility,
+    Expression<String>? avatarPath,
     Expression<bool>? synced,
     Expression<DateTime>? registeredAt,
     Expression<int>? rowid,
@@ -495,6 +542,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
       if (churchId != null) 'church_id': churchId,
       if (membershipStatus != null) 'membership_status': membershipStatus,
       if (visibility != null) 'visibility': visibility,
+      if (avatarPath != null) 'avatar_path': avatarPath,
       if (synced != null) 'synced': synced,
       if (registeredAt != null) 'registered_at': registeredAt,
       if (rowid != null) 'rowid': rowid,
@@ -509,6 +557,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
     Value<String>? churchId,
     Value<String>? membershipStatus,
     Value<String>? visibility,
+    Value<String?>? avatarPath,
     Value<bool>? synced,
     Value<DateTime>? registeredAt,
     Value<int>? rowid,
@@ -521,6 +570,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
       churchId: churchId ?? this.churchId,
       membershipStatus: membershipStatus ?? this.membershipStatus,
       visibility: visibility ?? this.visibility,
+      avatarPath: avatarPath ?? this.avatarPath,
       synced: synced ?? this.synced,
       registeredAt: registeredAt ?? this.registeredAt,
       rowid: rowid ?? this.rowid,
@@ -551,6 +601,9 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
     if (visibility.present) {
       map['visibility'] = Variable<String>(visibility.value);
     }
+    if (avatarPath.present) {
+      map['avatar_path'] = Variable<String>(avatarPath.value);
+    }
     if (synced.present) {
       map['synced'] = Variable<bool>(synced.value);
     }
@@ -573,6 +626,7 @@ class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
           ..write('churchId: $churchId, ')
           ..write('membershipStatus: $membershipStatus, ')
           ..write('visibility: $visibility, ')
+          ..write('avatarPath: $avatarPath, ')
           ..write('synced: $synced, ')
           ..write('registeredAt: $registeredAt, ')
           ..write('rowid: $rowid')
@@ -2820,6 +2874,7 @@ typedef $$LocalUsersTableCreateCompanionBuilder =
       required String churchId,
       required String membershipStatus,
       Value<String> visibility,
+      Value<String?> avatarPath,
       Value<bool> synced,
       Value<DateTime> registeredAt,
       Value<int> rowid,
@@ -2833,6 +2888,7 @@ typedef $$LocalUsersTableUpdateCompanionBuilder =
       Value<String> churchId,
       Value<String> membershipStatus,
       Value<String> visibility,
+      Value<String?> avatarPath,
       Value<bool> synced,
       Value<DateTime> registeredAt,
       Value<int> rowid,
@@ -2879,6 +2935,11 @@ class $$LocalUsersTableFilterComposer
 
   ColumnFilters<String> get visibility => $composableBuilder(
     column: $table.visibility,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get avatarPath => $composableBuilder(
+    column: $table.avatarPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2937,6 +2998,11 @@ class $$LocalUsersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get avatarPath => $composableBuilder(
+    column: $table.avatarPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get synced => $composableBuilder(
     column: $table.synced,
     builder: (column) => ColumnOrderings(column),
@@ -2983,6 +3049,11 @@ class $$LocalUsersTableAnnotationComposer
 
   GeneratedColumn<String> get visibility => $composableBuilder(
     column: $table.visibility,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get avatarPath => $composableBuilder(
+    column: $table.avatarPath,
     builder: (column) => column,
   );
 
@@ -3033,6 +3104,7 @@ class $$LocalUsersTableTableManager
                 Value<String> churchId = const Value.absent(),
                 Value<String> membershipStatus = const Value.absent(),
                 Value<String> visibility = const Value.absent(),
+                Value<String?> avatarPath = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
                 Value<DateTime> registeredAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3044,6 +3116,7 @@ class $$LocalUsersTableTableManager
                 churchId: churchId,
                 membershipStatus: membershipStatus,
                 visibility: visibility,
+                avatarPath: avatarPath,
                 synced: synced,
                 registeredAt: registeredAt,
                 rowid: rowid,
@@ -3057,6 +3130,7 @@ class $$LocalUsersTableTableManager
                 required String churchId,
                 required String membershipStatus,
                 Value<String> visibility = const Value.absent(),
+                Value<String?> avatarPath = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
                 Value<DateTime> registeredAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3068,6 +3142,7 @@ class $$LocalUsersTableTableManager
                 churchId: churchId,
                 membershipStatus: membershipStatus,
                 visibility: visibility,
+                avatarPath: avatarPath,
                 synced: synced,
                 registeredAt: registeredAt,
                 rowid: rowid,

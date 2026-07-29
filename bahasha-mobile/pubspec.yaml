@@ -1,7 +1,7 @@
 name: bahasha
 description: "Bahasha — offline-first church giving over Bluetooth Low Energy."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+7
 
 environment:
   sdk: ^3.12.0
@@ -47,6 +47,9 @@ dependencies:
   share_plus: ^10.1.2
   intl: ^0.20.2
 
+  # --- Media -----------------------------------------------------------------
+  image_picker: ^1.1.2            # profile photo (top-right avatar)
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -59,13 +62,17 @@ flutter:
 
   assets:
     - assets/icons/
+    - assets/fruits/
+    - assets/baskets/
 
-  # Elms Sans is the Figma typeface but is licensed and not bundled here.
-  # Quicksand (SIL Open Font License) is the closest free geometric substitute
-  # and is wired through a single token (AppTypography.fontFamily). To ship the
-  # real design, drop Elms Sans .ttf files in assets/fonts/, list them below,
-  # and change that one constant — nothing else references the family directly.
   fonts:
+    # Inter is the typeface in the current Figma (the fruit/offertory design).
+    # Bundled as the variable font; weights are selected via FontVariation in
+    # PixelCanvas so Light (300) and Regular (400) render exactly as designed.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    # Retained for the older account/history/customize/registration screens.
     - family: BahashaSans
       fonts:
         - asset: assets/fonts/Quicksand.ttf

@@ -3,101 +3,56 @@ import '../../../core/theme/app_colors.dart';
 
 /// A contribution category as shown on the giving screen.
 ///
-/// In production these are fetched from the backend (`/churches/:id/categories`)
-/// so the list changes without an app release, and cached locally for offline
-/// use. [seed] mirrors the server's launch set so a first, never-synced launch
-/// still shows the correct twelve categories.
+/// The offertory redesign represents each category with a fruit image: choosing
+/// a fruit adds that giving type to the basket. [asset] is the fruit photo,
+/// [giveLabel] fills the "How much ... are you giving?" prompt.
+///
+/// Codes are identical to the backend reference rows (contribution_categories);
+/// the ingest RPC rejects any unknown code, so this list and the seed migration
+/// (0017) must stay in lock-step.
 @immutable
 class ContributionCategory {
   const ContributionCategory({
     required this.code,
     required this.name,
-    required this.description,
+    required this.asset,
+    required this.giveLabel,
+    this.description = '',
     this.fixedAmount,
     this.percentageHint,
   });
 
   final String code;
   final String name;
+
+  /// Fruit image for this category, under assets/fruits/.
+  final String asset;
+
+  /// Lowercase phrase used in the basket prompt, e.g. "tithe" → "How much tithe
+  /// are you giving?".
+  final String giveLabel;
+
   final String description;
-
-  /// Categories with a mandated amount (e.g. Station Fund, KSh 200) are shown
-  /// with the amount preset and not freely editable.
   final double? fixedAmount;
-
-  /// Categories expressed as a share of income (e.g. God's Tithe, 10%). Used
-  /// only to prefill a suggestion; the giver always confirms.
   final double? percentageHint;
 
   /// The row colour is a function of position, cycling the Figma palette.
+  /// Retained for the legacy Customize screen.
   static Color colorForIndex(int index) =>
       AppColors.categoryCycle[index % AppColors.categoryCycle.length];
 
-  /// The launch categories, identical in code and order to the backend seed
-  /// (`0008_seed_reference_data.sql`).
+  /// The ten giving types of the offertory design, in Figma grid order
+  /// (row-major, two columns). Codes match seed migration 0017.
   static const List<ContributionCategory> seed = <ContributionCategory>[
-    ContributionCategory(
-      code: 'tithe',
-      name: "God's Tithe",
-      description:
-          'Your contributions support your local conference pastors and church conference workers',
-      percentageHint: 10,
-    ),
-    ContributionCategory(
-      code: 'combined_offering',
-      name: 'Combined Offering',
-      description: 'Shared offering distributed across local, conference and union funds',
-    ),
-    ContributionCategory(
-      code: 'local_church_budget',
-      name: 'Local Church Budget (LCB)',
-      description: 'Runs the day-to-day operations of your local church',
-    ),
-    ContributionCategory(
-      code: 'church_building',
-      name: 'Church Building / Development',
-      description: 'Construction and development of your local church',
-    ),
-    ContributionCategory(
-      code: 'church_evangelism',
-      name: 'Church Evangelism',
-      description: 'Supports evangelism run by your local church',
-    ),
-    ContributionCategory(
-      code: 'conference_evangelism',
-      name: 'Conference Evangelism',
-      description: 'Supports evangelism coordinated at conference level',
-    ),
-    ContributionCategory(
-      code: 'camp_meeting_offering',
-      name: 'Camp Meeting Offering',
-      description: 'Offering collected toward camp meeting',
-    ),
-    ContributionCategory(
-      code: 'camp_meeting_expenses',
-      name: 'Camp Meeting Expenses',
-      description: 'Covers the running costs of camp meeting',
-    ),
-    ContributionCategory(
-      code: 'thanksgiving',
-      name: 'Thanksgiving',
-      description: 'A thanksgiving offering',
-    ),
-    ContributionCategory(
-      code: 'welfare',
-      name: 'Welfare',
-      description: 'Supports members of the church family in need',
-    ),
-    ContributionCategory(
-      code: 'station_fund',
-      name: 'Station Fund',
-      description: 'Fixed station contribution of KSh 200',
-      fixedAmount: 200,
-    ),
-    ContributionCategory(
-      code: 'others',
-      name: 'Others',
-      description: 'Any other contribution not covered above',
-    ),
+    ContributionCategory(code: 'tithe', name: 'Tithe', asset: 'assets/fruits/tithe.png', giveLabel: 'tithe', percentageHint: 10),
+    ContributionCategory(code: 'offering', name: 'Offering', asset: 'assets/fruits/offering.png', giveLabel: 'offering'),
+    ContributionCategory(code: 'church_budget', name: 'Church budget', asset: 'assets/fruits/church_budget.png', giveLabel: 'church budget'),
+    ContributionCategory(code: 'camp_offering', name: 'Camp offering', asset: 'assets/fruits/camp_offering.png', giveLabel: 'camp offering'),
+    ContributionCategory(code: 'camp_budget', name: 'Camp budget', asset: 'assets/fruits/camp_budget.png', giveLabel: 'camp budget'),
+    ContributionCategory(code: 'mission', name: 'Mission', asset: 'assets/fruits/mission.png', giveLabel: 'mission'),
+    ContributionCategory(code: 'development', name: 'Development', asset: 'assets/fruits/development.png', giveLabel: 'development'),
+    ContributionCategory(code: 'children_ministry', name: 'Children ministry', asset: 'assets/fruits/children_ministry.png', giveLabel: 'children ministry'),
+    ContributionCategory(code: 'women_ministry', name: 'Women ministry', asset: 'assets/fruits/women_ministry.png', giveLabel: 'women ministry'),
+    ContributionCategory(code: 'adventist_men', name: 'Adventist men', asset: 'assets/fruits/adventist_men.png', giveLabel: 'adventist men'),
   ];
 }
