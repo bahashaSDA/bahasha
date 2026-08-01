@@ -7,7 +7,6 @@ import '../application/basket_controller.dart';
 import '../domain/contribution_category.dart';
 import 'category_amount_screen.dart';
 import 'thank_you_screen.dart';
-import 'widgets/fruit_basket.dart';
 import 'widgets/offerings_header.dart';
 
 /// The offertory basket / checkout — pixel-perfect to the Figma frame
@@ -59,16 +58,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
           px.text(0, 172, 'My offertory basket', size: 20, weight: FontWeight.w300,
               color: Colors.black, width: 420, align: TextAlign.center, fontFamily: 'Inter'),
 
-          // The offertory basket — holds ONLY the chosen fruits, each dropping
-          // in with a staggered motion. No stock imagery: what you picked is
-          // exactly what fills the basket.
-          px.at(56.5, 232, width: 307, height: 307, child: FruitBasket(
-            assets: [for (final c in selected) c.asset],
-            animation: _anim,
+          // The offertory basket (the designer's real basket photo) with a
+          // gentle pop. The fruits you actually chose are named below.
+          px.at(56.5, 232, width: 307, height: 307, child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1).animate(
+              CurvedAnimation(parent: _anim, curve: Curves.easeOutBack)),
+            child: Image.asset('assets/baskets/basket_full.png', fit: BoxFit.contain),
           )),
 
           px.text(0, 569, 'KES ${_money.format(basket.total)}', size: 20, weight: FontWeight.w300,
               color: const Color(0xFF008805), width: 420, align: TextAlign.center, fontFamily: 'Inter'),
+
+          px.text(0, 604, "You're giving", size: 13, weight: FontWeight.w400,
+              color: const Color(0xFF8A8A93), width: 420, align: TextAlign.center, fontFamily: 'Inter'),
 
           // Chosen giving types — each drops into the basket (staggered).
           px.at(0, 636, width: 420, height: 150, child: Center(
