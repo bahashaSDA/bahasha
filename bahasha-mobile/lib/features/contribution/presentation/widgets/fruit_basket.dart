@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// The offertory basket that holds EXACTLY the fruits the giver chose — nothing
-/// they didn't. Built from a real wicker basket photo (basket_front.png: the
-/// cream-lined front lip + woven body) layered IN FRONT of the chosen fruits
-/// (transparent cut-outs), so the fruits look genuinely nestled inside the
-/// basket. Each fruit drops in with a staggered animation.
+/// The offertory basket that holds EXACTLY the fruits the giver chose. Built
+/// from a REAL wicker basket (empty, cream-lined, with handle — derived from the
+/// designer's basket photo) with the chosen fruits (transparent cut-outs)
+/// nestled into the bowl and the real cream lip layered in front, so the fruits
+/// look genuinely inside the basket — matching the Figma. Each fruit drops in
+/// with a staggered animation.
 class FruitBasket extends StatelessWidget {
   const FruitBasket({
     super.key,
@@ -18,31 +19,26 @@ class FruitBasket extends StatelessWidget {
   final Animation<double> animation;
   final double size;
 
-  // The real basket-front asset's native aspect ratio.
-  static const double _basketAspect = 250 / 736;
+  // basket_lip.png native aspect (front cream lip + woven body crop).
+  static const double _lipAspect = 405 / 900;
 
   @override
   Widget build(BuildContext context) {
-    final w = size;
-    final boxH = size;
-    final basketH = w * _basketAspect;
-    final frontTop = boxH - basketH; // y where the real basket lip begins
+    final s = size;
     final n = assets.length;
-
     final perRow = n <= 4 ? n : (n / 2).ceil();
-    final fruitSize = (n <= 2 ? 0.52 : n <= 4 ? 0.46 : n <= 6 ? 0.36 : 0.30) * w;
-    final step = fruitSize * 0.62;
-    // Fruit bottoms sink into the basket lip so they read as tucked inside
-    // (verified against a rendered composite of 1/3/6 fruits).
-    final baseBottom = frontTop + basketH * 0.58;
+    final fruitSize = (n <= 1 ? 0.54 : n <= 2 ? 0.50 : n <= 4 ? 0.45 : n <= 6 ? 0.37 : 0.31) * s;
+    final step = fruitSize * 0.60;
+    final baseBottom = 0.635 * s; // fruit bottoms sink to the lip, tucked inside
+    final lipH = s * _lipAspect;
 
     final fruits = <Widget>[];
     for (var i = 0; i < n; i++) {
       final row = i < perRow ? 0 : 1;
       final idxInRow = i - row * perRow;
       final countInRow = row == 0 ? (n < perRow ? n : perRow) : n - perRow;
-      final cx = w / 2 + (idxInRow - (countInRow - 1) / 2) * step;
-      final cy = baseBottom - fruitSize / 2 - row * (fruitSize * 0.50) - (idxInRow.isOdd ? fruitSize * 0.06 : 0);
+      final cx = s * 0.47 + (idxInRow - (countInRow - 1) / 2) * step;
+      final cy = baseBottom - fruitSize / 2 - row * (fruitSize * 0.5) - (idxInRow.isOdd ? fruitSize * 0.05 : 0);
 
       final start = n <= 1 ? 0.0 : (i / n) * 0.5;
       final curve = CurvedAnimation(parent: animation, curve: Interval(start, 1, curve: Curves.easeOutBack));
@@ -65,28 +61,19 @@ class FruitBasket extends StatelessWidget {
     }
 
     return SizedBox(
-      width: w,
-      height: boxH,
+      width: s,
+      height: s,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Soft contact shadow so the pile has weight.
-          Positioned(
-            left: w * 0.18, right: w * 0.18, top: frontTop - fruitSize * 0.15, height: basketH * 0.5,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(200),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 18, spreadRadius: 2)],
-              ),
-            ),
-          ),
-          // Chosen fruits (behind the basket front).
+          // Empty real basket (handle, back rim, cream bowl) — behind the fruits.
+          Positioned.fill(child: Image.asset('assets/baskets/basket_empty.png', fit: BoxFit.contain)),
+          // Chosen fruits, nestled in the bowl.
           ...fruits,
-          // The real basket, in front, so fruit bottoms tuck inside it.
+          // Real cream lip + woven front — in front, so fruit bottoms tuck inside.
           Positioned(
-            left: 0, right: 0, bottom: 0, height: basketH,
-            child: Image.asset('assets/baskets/basket_front.png',
-                fit: BoxFit.fitWidth, alignment: Alignment.bottomCenter),
+            left: 0, right: 0, bottom: 0, height: lipH,
+            child: Image.asset('assets/baskets/basket_lip.png', fit: BoxFit.fitWidth, alignment: Alignment.bottomCenter),
           ),
         ],
       ),
