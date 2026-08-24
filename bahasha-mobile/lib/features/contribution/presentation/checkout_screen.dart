@@ -97,32 +97,79 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
     final start = total <= 1 ? 0.0 : (index / total) * 0.5;
     final anim = CurvedAnimation(parent: _anim, curve: Interval(start, 1, curve: Curves.easeOutBack));
     return SizedBox(
-      width: 118 * px.scale,
+      width: 124 * px.scale,
       child: FadeTransition(
         opacity: _anim,
         child: ScaleTransition(
           scale: Tween<double>(begin: 0.4, end: 1).animate(anim),
-          child: GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => CategoryAmountScreen(category: c)),
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Stack(clipBehavior: Clip.none, children: [
-                SizedBox(width: 100 * px.scale, height: 100 * px.scale,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+              // Tap the fruit → a small popup right here (add more / cancel).
+              GestureDetector(
+                onTapDown: (d) => _thumbPopup(c, d.globalPosition),
+                child: SizedBox(width: 100 * px.scale, height: 100 * px.scale,
                     child: Image.asset(c.asset, fit: BoxFit.contain)),
-                Positioned(right: -2 * px.scale, top: 0,
-                    child: Icon(Icons.add, size: 18 * px.scale, color: const Color(0xFF008805))),
-              ]),
-              SizedBox(height: 4 * px.scale),
-              Text(c.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 12 * px.scale, color: Colors.black)),
-              Text('KES ${_money.format(amount)}', textAlign: TextAlign.center,
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 11 * px.scale, color: const Color(0xFF008805))),
+              ),
+              // Minus on the left removes this offering.
+              Positioned(left: -6 * px.scale, top: 36 * px.scale,
+                  child: _roundBtn(px, Icons.remove, () => _removeOffering(c))),
+              // Plus on the right adds more to it.
+              Positioned(right: -6 * px.scale, top: 36 * px.scale,
+                  child: _roundBtn(px, Icons.add, () => _editAmount(c))),
             ]),
-          ),
+            SizedBox(height: 4 * px.scale),
+            Text(c.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontFamily: 'Inter', fontSize: 12 * px.scale, color: Colors.black)),
+            Text('KES ${_money.format(amount)}', textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Inter', fontSize: 11 * px.scale, color: const Color(0xFF008805))),
+          ]),
         ),
       ),
     );
+  }
+
+  Widget _roundBtn(Px px, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 26 * px.scale, height: 26 * px.scale,
+        decoration: BoxDecoration(
+          color: Colors.white, shape: BoxShape.circle,
+          boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
+        ),
+        child: Icon(icon, size: 17 * px.scale, color: const Color(0xFF008805)),
+      ),
+    );
+  }
+
+  void _editAmount(ContributionCategory c) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => CategoryAmountScreen(category: c)));
+  }
+
+  void _removeOffering(ContributionCategory c) {
+    ref.read(basketProvider.notifier).remove(c.code);
+    if (ref.read(basketProvider).isEmpty && mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _thumbPopup(ContributionCategory c, Offset pos) async {
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx, pos.dy),
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      items: const [
+        PopupMenuItem(value: 'add', height: 40, child: Row(children: [
+          Icon(Icons.add, size: 18, color: Color(0xFF008805)), SizedBox(width: 8),
+          Text('Add more', style: TextStyle(fontFamily: 'Inter', fontSize: 14)),
+        ])),
+        PopupMenuItem(value: 'cancel', height: 40, child: Row(children: [
+          Icon(Icons.close, size: 18, color: Color(0xFFE03131)), SizedBox(width: 8),
+          Text('Cancel offering', style: TextStyle(fontFamily: 'Inter', fontSize: 14)),
+        ])),
+      ],
+    );
+    if (choice == 'add') _editAmount(c);
+    if (choice == 'cancel') _removeOffering(c);
   }
 
   Future<void> _give(List<ContributionCategory> selected) async {

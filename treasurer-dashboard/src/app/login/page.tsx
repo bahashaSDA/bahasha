@@ -105,7 +105,7 @@ export default function LoginPage() {
           </form>
         )}
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          Made by calemaley · © 2026 Bahasha
+          © 2026 Bahasha
         </p>
       </div>
     </div>

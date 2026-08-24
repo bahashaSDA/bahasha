@@ -1,5 +1,5 @@
 // Bahasha — offline-first church giving.
-// Copyright © 2026 Bahasha. Developed by calemaley. All rights reserved.
+// Copyright © 2026 Bahasha. All rights reserved.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

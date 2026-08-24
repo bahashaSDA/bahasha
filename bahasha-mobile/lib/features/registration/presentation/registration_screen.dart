@@ -4,9 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 
-/// First-time welcome + registration, styled to match the offertory redesign:
-/// white canvas, Inter face, offertory green. Collected once; later launches go
-/// straight to Home. Written locally first so it completes offline, then syncs.
+/// First-time welcome + registration — one screen, no scrolling. We collect only
+/// what the system can't work out on its own: the giver's name, phone, and the
+/// church they belong to (their HOME church). Whether a given offering counts as
+/// a member or a visitor is decided automatically at giving time by comparing
+/// this home church with the church of the CVendor hub they hand to (known over
+/// Bluetooth) — so there is no "status" question here. New givers are secret by
+/// default; that can be changed later in the menu.
 class RegistrationScreen extends ConsumerStatefulWidget {
   const RegistrationScreen({super.key, required this.onComplete});
 
@@ -24,13 +28,9 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
-
   String? _churchId;
-  String _membership = 'member';
-  bool _anonymous = false;
   bool _submitting = false;
 
-  // The four welcome fruits (a taste of the offertory grid).
   static const _welcomeFruits = <String>[
     'assets/fruits/tithe.png', 'assets/fruits/offering.png',
     'assets/fruits/camp_budget.png', 'assets/fruits/mission.png',
@@ -54,21 +54,20 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
     if (!_formKey.currentState!.validate() || _churchId == null) {
       if (_churchId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please choose your church')),
+          const SnackBar(content: Text('Please choose the church you belong to')),
         );
       }
       return;
     }
     setState(() => _submitting = true);
     try {
-      final repo = ref.read(registrationRepositoryProvider);
-      await repo.registerLocally(
-        fullName: _name.text.trim(),
-        phone: _phone.text.trim(),
-        churchId: _churchId!,
-        membershipStatus: _membership,
-        visibility: _anonymous ? 'secret' : 'open',
-      );
+      await ref.read(registrationRepositoryProvider).registerLocally(
+            fullName: _name.text.trim(),
+            phone: _phone.text.trim(),
+            churchId: _churchId!, // the giver's home church
+            membershipStatus: 'member', // auto-reclassified per giving vs hub church
+            visibility: 'secret', // secret by default
+          );
       unawaited(_trySync());
       ref.invalidate(currentUserProvider);
       widget.onComplete();
@@ -86,115 +85,83 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
     try {
       await ref.read(registrationRepositoryProvider).sync();
       ref.invalidate(currentUserProvider);
-    } catch (_) {
-      // The outbox/sync service retries when the network returns.
-    }
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(28, 28, 28, 28),
-            children: <Widget>[
-              // Welcome fruit motif.
-              SizedBox(
-                height: 72,
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  for (final f in _welcomeFruits)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: SizedBox(width: 60, height: 60, child: Image.asset(f, fit: BoxFit.contain)),
-                    ),
-                ]),
-              ),
-              const SizedBox(height: 20),
-              const Text('Welcome to Bahasha',
-                  style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w300, fontSize: 28, color: _ink)),
-              const SizedBox(height: 10),
-              const Text(
-                'Give to your church effortlessly — even with mobile data off. '
-                'Tell us who you are; this is only asked once.',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 15, color: _grey, height: 1.4),
-              ),
-              const SizedBox(height: 28),
-
-              _label('Full name'),
-              _field(
-                controller: _name,
-                hint: 'e.g. Grace Wanjiru',
-                keyboard: TextInputType.name,
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your name' : null,
-              ),
-              const SizedBox(height: 20),
-
-              _label('Phone number'),
-              _field(
-                controller: _phone,
-                hint: '07XX XXX XXX',
-                keyboard: TextInputType.phone,
-                formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
-                validator: _validatePhone,
-              ),
-              const SizedBox(height: 20),
-
-              _label('Church'),
-              DropdownButtonFormField<String>(
-                initialValue: _churchId,
-                items: _fallbackChurches
-                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontFamily: 'Inter'))))
-                    .toList(),
-                onChanged: (v) => setState(() => _churchId = v),
-                decoration: _decoration('Choose your church'),
-                isExpanded: true,
-              ),
-              const SizedBox(height: 24),
-
-              _label('Your status'),
-              _MembershipChoice(value: _membership, onChanged: (v) => setState(() => _membership = v)),
-              const SizedBox(height: 12),
-
-              SwitchListTile.adaptive(
-                value: _anonymous,
-                onChanged: (v) => setState(() => _anonymous = v),
-                contentPadding: EdgeInsets.zero,
-                activeTrackColor: _green,
-                title: const Text('Give secretly',
-                    style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w400, fontSize: 17, color: _ink)),
-                subtitle: const Text(
-                  'Your name and phone are hidden from church reports. You can change this anytime in the menu.',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: _grey, height: 1.35),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                SizedBox(
+                  height: 64,
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    for (final f in _welcomeFruits)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: SizedBox(width: 54, height: 54, child: Image.asset(f, fit: BoxFit.contain)),
+                      ),
+                  ]),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 18),
+                const Text('Welcome to Bahasha',
+                    style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w300, fontSize: 27, color: _ink)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Give to your church effortlessly — even with mobile data off. '
+                  'This is only asked once.',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 15, color: _grey, height: 1.4),
+                ),
+                const SizedBox(height: 26),
 
-              // Green pill continue button (matches the offertory pills).
-              GestureDetector(
-                onTap: _submitting ? null : _submit,
-                child: Container(
-                  height: 56,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _green,
-                    borderRadius: BorderRadius.circular(62),
+                _label('Full name'),
+                _field(controller: _name, hint: 'e.g. Grace Wanjiru', keyboard: TextInputType.name,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your name' : null),
+                const SizedBox(height: 16),
+
+                _label('Phone number'),
+                _field(controller: _phone, hint: '07XX XXX XXX', keyboard: TextInputType.phone,
+                    formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
+                    validator: _validatePhone),
+                const SizedBox(height: 16),
+
+                _label('Church you belong to'),
+                DropdownButtonFormField<String>(
+                  initialValue: _churchId,
+                  items: _fallbackChurches
+                      .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontFamily: 'Inter'))))
+                      .toList(),
+                  onChanged: (v) => setState(() => _churchId = v),
+                  decoration: _decoration('Choose your home church'),
+                  isExpanded: true,
+                ),
+
+                const Spacer(),
+                GestureDetector(
+                  onTap: _submitting ? null : _submit,
+                  child: Container(
+                    height: 56,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(62)),
+                    child: _submitting
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Continue',
+                            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 18, color: Colors.white)),
                   ),
-                  child: _submitting
-                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Continue',
-                          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 18, color: Colors.white)),
                 ),
-              ),
-              const SizedBox(height: 24),
-              const Center(
-                child: Text('Made by calemaley  ·  © 2026 Bahasha',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: Color(0x73000000))),
-              ),
-            ],
+                const SizedBox(height: 14),
+                const Center(child: Text('© 2026 Bahasha',
+                    style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: Color(0x73000000)))),
+              ],
+            ),
           ),
         ),
       ),
@@ -209,7 +176,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 7),
         child: Text(text, style: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 15, color: _ink)),
       );
 
@@ -235,58 +202,9 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
         hintStyle: const TextStyle(fontFamily: 'Inter', color: Color(0x80000000)),
         filled: true,
         fillColor: const Color(0xFFF5F5F7),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _green, width: 1.5),
-        ),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _green, width: 1.5)),
       );
-}
-
-/// Membership status selector, in the offertory green.
-class _MembershipChoice extends StatelessWidget {
-  const _MembershipChoice({required this.value, required this.onChanged});
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  static const _green = Color(0xFF008805);
-  static const _options = <({String id, String label})>[
-    (id: 'member', label: 'Member of this church'),
-    (id: 'visitor', label: 'Visitor'),
-    (id: 'other_church_member', label: 'Member of another church'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: _options.map((o) {
-        final selected = o.id == value;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => onChanged(o.id),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: selected ? _green : Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: selected ? _green : const Color(0x1F000000)),
-              ),
-              child: Row(children: <Widget>[
-                Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    color: selected ? Colors.white : const Color(0xFF9A9AAE), size: 22),
-                const SizedBox(width: 12),
-                Text(o.label,
-                    style: TextStyle(fontFamily: 'Inter', fontSize: 16, color: selected ? Colors.white : Colors.black)),
-              ]),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
 }

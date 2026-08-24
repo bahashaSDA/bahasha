@@ -216,7 +216,7 @@ export default function DashboardPage() {
         ) : null}
 
         <footer className="mt-10 border-t pt-6 text-center text-xs text-muted-foreground">
-          Made by calemaley · © 2026 Bahasha
+          © 2026 Bahasha
         </footer>
       </main>
     </div>

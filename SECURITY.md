@@ -1,6 +1,6 @@
 # Bahasha — Security
 
-© 2026 Bahasha. Developed by **calemaley**. All rights reserved.
+© 2026 Bahasha. All rights reserved.
 
 This document records Bahasha's threat model, the protections in place, and the
 findings from an adversarial (black-hat-style) review of the codebase. It is a
@@ -59,5 +59,5 @@ afterthought.
 - [ ] Change all seeded demo passwords before launch.
 
 ## Reporting
-Found something? Contact the Bahasha team (developer: **calemaley**). Please
+Found something? Contact the Bahasha team. Please
 disclose privately before any public posting.
