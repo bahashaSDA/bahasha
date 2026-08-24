@@ -33,7 +33,12 @@ export const contributionPayloadSchema = z
     idempotencyKey: uuid,
     deviceUuid: uuid,
     userId: uuid,
-    churchId: uuid,
+    /**
+     * The giver's HOME church, free text. NOT the church being given to — that is
+     * the hub's own church. This is signed so the backend can classify the gift
+     * as member/visitor of the collecting church.
+     */
+    homeChurch: z.string().trim().min(1).max(120),
     /** Payer number in E.164; the hub relays it verbatim from the device. */
     msisdn: z.string().regex(/^\+254[17][0-9]{8}$/, 'msisdn must be E.164 Kenyan mobile'),
     totalAmount: z.number().int().positive().max(250_000),

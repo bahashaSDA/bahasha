@@ -91,17 +91,11 @@ export async function ingestContribution(
   payload: ContributionPayload,
   ctx: IngestContext,
 ): Promise<IngestResult> {
-  // --- 0. Hub/church consistency --------------------------------------------
-  // The payload names a church; it must be the hub's own church. A hub only
-  // ever settles offerings for the congregation it belongs to.
-  if (payload.churchId !== ctx.hubChurchId) {
-    await reject(
-      payload,
-      ctx,
-      `church mismatch: payload=${payload.churchId} hub=${ctx.hubChurchId}`,
-      'This payload does not belong to your church',
-    );
-  }
+  // The collecting church is the hub's own church (the hub authenticated with
+  // its API key). The giver may be a member of it or a visiting giver from
+  // elsewhere — both are allowed; which one is decided below by comparing their
+  // signed home church to this church's name.
+  const collectingChurchId = ctx.hubChurchId;
 
   // --- 1. Idempotency --------------------------------------------------------
   const { data: existing } = await adminDb
@@ -153,7 +147,7 @@ export async function ingestContribution(
   // the check that stops a crafted packet from billing a stranger.
   const { data: user } = await adminDb
     .from('users')
-    .select('id, phone, church_id, visibility')
+    .select('id, phone, visibility')
     .eq('id', payload.userId)
     .maybeSingle();
 
@@ -166,14 +160,6 @@ export async function ingestContribution(
       ctx,
       'msisdn does not match the user of record',
       'Phone number does not match the registered user',
-    );
-  }
-  if (user!.church_id !== payload.churchId) {
-    await reject(
-      payload,
-      ctx,
-      `user church mismatch: user=${user!.church_id} payload=${payload.churchId}`,
-      'User does not belong to this church',
     );
   }
 
@@ -219,7 +205,7 @@ export async function ingestContribution(
       idempotencyKey: payload.idempotencyKey,
       deviceUuid: payload.deviceUuid,
       userId: payload.userId,
-      churchId: payload.churchId,
+      homeChurch: payload.homeChurch,
       msisdn: payload.msisdn,
       totalAmount: payload.totalAmount,
       counter: payload.counter,
@@ -237,6 +223,22 @@ export async function ingestContribution(
     await reject(payload, ctx, 'invalid signature', 'Payload signature is invalid');
   }
 
+  // --- 4b. Member vs visitor -------------------------------------------------
+  // Compare the giver's signed home church to THIS collecting church's name. A
+  // loose, case/whitespace-insensitive match counts as a member; anything else
+  // is a visiting giver. The result is snapshotted on the contribution so the
+  // dashboard metric is per-gift and correct.
+  const { data: collectingChurch } = await adminDb
+    .from('churches')
+    .select('name')
+    .eq('id', collectingChurchId)
+    .maybeSingle();
+  const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const membership: 'member' | 'visitor' =
+    collectingChurch?.name && norm(payload.homeChurch) === norm(collectingChurch.name as string)
+      ? 'member'
+      : 'visitor';
+
   // --- 5. Persist atomically -------------------------------------------------
   // One RPC does: insert bluetooth_payloads(verified), insert contribution +
   // allocations, advance devices.last_counter -- all in a single transaction,
@@ -244,7 +246,7 @@ export async function ingestContribution(
   // two concurrent uploads cannot both win. See 0009_ingest_rpc.sql.
   const { data: persisted, error: persistErr } = await adminDb.rpc('ingest_contribution', {
     p_hub_id: ctx.hubId,
-    p_church_id: payload.churchId,
+    p_church_id: collectingChurchId,
     p_user_id: payload.userId,
     p_device_uuid: payload.deviceUuid,
     p_idempotency_key: payload.idempotencyKey,
@@ -259,6 +261,8 @@ export async function ingestContribution(
       category_code: a.categoryCode,
       amount: a.amount,
     })),
+    p_home_church: payload.homeChurch,
+    p_membership: membership,
   });
 
   if (persistErr) {
@@ -294,7 +298,7 @@ export async function ingestContribution(
     .select(
       'mpesa_shortcode, mpesa_passkey_encrypted, mpesa_consumer_key_encrypted, mpesa_consumer_secret_encrypted, payments_validated',
     )
-    .eq('id', payload.churchId)
+    .eq('id', collectingChurchId)
     .maybeSingle();
 
   // A church can settle only when: it has a paybill + passkey, a Daraja app to
@@ -312,7 +316,7 @@ export async function ingestContribution(
 
   if (!canSettle) {
     logger.warn(
-      { contributionId, church: payload.churchId },
+      { contributionId, church: collectingChurchId },
       'payments not fully configured; contribution recorded but STK push skipped',
     );
     return {
@@ -339,7 +343,7 @@ export async function ingestContribution(
 
     await adminDb.rpc('record_stk_initiation', {
       p_contribution_id: contributionId,
-      p_church_id: payload.churchId,
+      p_church_id: collectingChurchId,
       p_msisdn: payload.msisdn,
       p_amount: payload.totalAmount,
       p_merchant_request_id: stk.merchantRequestId,

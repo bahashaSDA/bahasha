@@ -28,8 +28,8 @@ const registerSchema = z.object({
   clientUuid: z.string().uuid(),
   fullName: z.string().trim().min(1).max(120),
   phone: z.string().min(7).max(20),
-  churchId: z.string().uuid(),
-  membershipStatus: z.enum(['member', 'visitor', 'other_church_member']),
+  /** The giver's HOME church, free text (not every church is listed). */
+  homeChurch: z.string().trim().min(1).max(120),
   visibility: z.enum(['open', 'secret']).default('open'),
   device: z.object({
     deviceUuid: z.string().uuid(),
@@ -63,41 +63,30 @@ registrationRouter.post(
       });
     }
 
-    // Church must exist and be active.
-    const { data: church } = await adminDb
-      .from('churches')
-      .select('id')
-      .eq('id', body.churchId)
-      .eq('is_active', true)
-      .maybeSingle();
-    if (!church) throw notFound('Church not found');
-
     // --- Reconcile the user on client_uuid (idempotent registration) --------
+    // The home church is free text; membership vs the collecting church is
+    // decided per gift at ingest, so no church FK or fixed status is stored here.
     const { data: existingUser } = await adminDb
       .from('users')
-      .select('id, phone, church_id')
+      .select('id, phone')
       .eq('client_uuid', body.clientUuid)
       .maybeSingle();
 
     let userId: string;
     if (existingUser) {
       userId = existingUser.id as string;
-      // Allow profile corrections on re-register, but a phone already used by a
-      // DIFFERENT person at this church is a conflict the DB unique index will
-      // also refuse -- surface it cleanly.
       const { error: updErr } = await adminDb
         .from('users')
         .update({
           full_name: body.fullName,
           phone: msisdn,
-          church_id: body.churchId,
-          membership_status: body.membershipStatus,
+          home_church_name: body.homeChurch,
           visibility: body.visibility,
           last_seen_at: new Date().toISOString(),
         })
         .eq('id', userId);
       if (updErr) {
-        if (updErr.code === '23505') throw conflict('That phone number is already registered at this church');
+        if (updErr.code === '23505') throw conflict('That phone number is already registered');
         throw updErr;
       }
     } else {
@@ -107,14 +96,13 @@ registrationRouter.post(
           client_uuid: body.clientUuid,
           full_name: body.fullName,
           phone: msisdn,
-          church_id: body.churchId,
-          membership_status: body.membershipStatus,
+          home_church_name: body.homeChurch,
           visibility: body.visibility,
         })
         .select('id')
         .single();
       if (insErr) {
-        if (insErr.code === '23505') throw conflict('That phone number is already registered at this church');
+        if (insErr.code === '23505') throw conflict('That phone number is already registered');
         throw insErr;
       }
       userId = created.id as string;
@@ -141,7 +129,7 @@ registrationRouter.post(
     // Seed a default theme row if none exists (offline-first apps expect one).
     await adminDb.from('themes').upsert({ user_id: userId }, { onConflict: 'user_id' });
 
-    res.status(201).json({ userId, churchId: body.churchId });
+    res.status(201).json({ userId, homeChurch: body.homeChurch });
   }),
 );
 

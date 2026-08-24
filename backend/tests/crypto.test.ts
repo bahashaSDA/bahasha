@@ -22,7 +22,7 @@ const samplePayload = {
   idempotencyKey: '99999999-0000-0000-0000-000000000001',
   deviceUuid: 'dddddddd-0000-0000-0000-000000000001',
   userId: 'aaaaaaaa-0000-0000-0000-000000000001',
-  churchId: 'cccccccc-0000-0000-0000-000000000001',
+  homeChurch: 'cccccccc-0000-0000-0000-000000000001',
   msisdn: '+254712345678',
   totalAmount: 1700,
   counter: 10,

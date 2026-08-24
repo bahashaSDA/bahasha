@@ -66,8 +66,8 @@ class RegistrationRepository {
       'clientUuid': user.clientUuid,
       'fullName': user.fullName,
       'phone': user.phone,
-      'churchId': user.churchId,
-      'membershipStatus': user.membershipStatus,
+      // The churchId column now holds the giver's free-text HOME church.
+      'homeChurch': user.churchId,
       'visibility': user.visibility,
       'device': {
         'deviceUuid': deviceUuid,

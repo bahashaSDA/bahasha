@@ -49,7 +49,8 @@ class ContributionRepository {
       idempotencyKey: id,
       deviceUuid: deviceUuid,
       userId: user.serverUserId ?? user.clientUuid,
-      churchId: user.churchId,
+      // The churchId column now holds the giver's free-text HOME church.
+      homeChurch: user.churchId,
       msisdn: user.phone,
       totalAmount: total,
       counter: counter,

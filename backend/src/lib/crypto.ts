@@ -53,7 +53,7 @@ export function canonicalPayloadBytes(input: {
   idempotencyKey: string;
   deviceUuid: string;
   userId: string;
-  churchId: string;
+  homeChurch: string;
   msisdn: string;
   totalAmount: number;
   counter: number;
@@ -67,7 +67,7 @@ export function canonicalPayloadBytes(input: {
     input.idempotencyKey,
     input.deviceUuid,
     input.userId,
-    input.churchId,
+    input.homeChurch,
     input.msisdn,
     String(input.totalAmount),
     String(input.counter),
