@@ -59,5 +59,5 @@ afterthought.
 - [ ] Change all seeded demo passwords before launch.
 
 ## Reporting
-Found something? Contact the Bahasha team. Please
+Found something? Contact the Bahasha team via the repository. Please
 disclose privately before any public posting.

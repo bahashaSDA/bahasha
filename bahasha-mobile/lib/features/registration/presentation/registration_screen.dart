@@ -28,7 +28,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
-  String? _churchId;
+  final _church = TextEditingController();
   bool _submitting = false;
 
   static const _welcomeFruits = <String>[
@@ -36,37 +36,24 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
     'assets/fruits/camp_budget.png', 'assets/fruits/mission.png',
   ];
 
-  static const _fallbackChurches = <({String id, String name})>[
-    (id: '00000000-0000-0000-0000-000000000001', name: 'Zetech University SDA Church'),
-    (id: '00000000-0000-0000-0000-000000000002', name: 'Jomo Kenyatta University SDA Church'),
-    (id: '00000000-0000-0000-0000-000000000003', name: 'Kenyatta University SDA Church'),
-    (id: '00000000-0000-0000-0000-000000000004', name: 'KCA University SDA Church'),
-  ];
-
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
+    _church.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() || _churchId == null) {
-      if (_churchId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please choose the church you belong to')),
-        );
-      }
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
       await ref.read(registrationRepositoryProvider).registerLocally(
             fullName: _name.text.trim(),
             phone: _phone.text.trim(),
-            churchId: _churchId!, // the giver's home church
+            churchId: _church.text.trim(), // the giver's home church (free text)
             membershipStatus: 'member', // auto-reclassified per giving vs hub church
-            visibility: 'secret', // secret by default
+            visibility: 'open', // give openly by default
           );
       unawaited(_trySync());
       ref.invalidate(currentUserProvider);
@@ -134,15 +121,8 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                 const SizedBox(height: 16),
 
                 _label('Church you belong to'),
-                DropdownButtonFormField<String>(
-                  initialValue: _churchId,
-                  items: _fallbackChurches
-                      .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontFamily: 'Inter'))))
-                      .toList(),
-                  onChanged: (v) => setState(() => _churchId = v),
-                  decoration: _decoration('Choose your home church'),
-                  isExpanded: true,
-                ),
+                _field(controller: _church, hint: 'e.g. Zetech University SDA Church', keyboard: TextInputType.text,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your church' : null),
 
                 const Spacer(),
                 GestureDetector(
