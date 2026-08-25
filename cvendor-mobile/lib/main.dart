@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers.dart';
 import 'features/pairing_screen.dart';
 import 'features/hub_dashboard_screen.dart';
+import 'features/onboarding_screen.dart';
 import 'theme.dart';
 
 void main() {
@@ -31,17 +32,41 @@ class CVendorApp extends StatelessWidget {
 
 /// Routes to pairing (unpaired) or the dashboard (paired), data-driven off the
 /// stored credential so a paired hub reopens straight to operations.
-class _Gate extends ConsumerWidget {
+class _Gate extends ConsumerStatefulWidget {
   const _Gate();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Gate> createState() => _GateState();
+}
+
+class _GateState extends ConsumerState<_Gate> {
+  bool? _seen;
+
+  @override
+  void initState() {
+    super.initState();
+    HubOnboardingScreen.seen().then((v) {
+      if (mounted) setState(() => _seen = v);
+    });
+  }
+
+  static const _loading = Scaffold(
+    backgroundColor: HubColors.surface,
+    body: Center(child: CircularProgressIndicator(color: HubColors.green)),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_seen == null) return _loading;
+    if (_seen == false) {
+      return HubOnboardingScreen(onDone: () async {
+        await HubOnboardingScreen.markSeen();
+        if (mounted) setState(() => _seen = true);
+      });
+    }
     final paired = ref.watch(isPairedProvider);
     return paired.when(
-      loading: () => const Scaffold(
-        backgroundColor: HubColors.panelGreen,
-        body: Center(child: CircularProgressIndicator(color: HubColors.indigo)),
-      ),
+      loading: () => _loading,
       error: (_, _) => const PairingScreen(),
       data: (isPaired) => isPaired ? const HubDashboardScreen() : const PairingScreen(),
     );

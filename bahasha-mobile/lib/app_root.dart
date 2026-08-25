@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers.dart';
+import 'core/onboarding.dart';
 import 'core/theme/app_colors.dart';
 import 'features/contribution/presentation/home_screen.dart';
+import 'features/onboarding/onboarding_screen.dart';
 import 'features/registration/presentation/registration_screen.dart';
 
-/// The root gate. Reads the local profile: if registration has not happened it
-/// shows the one-time registration flow, otherwise it goes straight to Home.
-/// This is what makes "next launches skip registration" true — the decision is
-/// data-driven off the local database, not a flag that can drift.
+/// The root gate. On the very first open it shows the one-time walkthrough; then
+/// the one-time registration; thereafter it goes straight to Home. Each decision
+/// is data-driven (a persisted flag / the local profile), never a runtime flag
+/// that can drift.
 class AppRoot extends ConsumerWidget {
   const AppRoot({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final seen = ref.watch(onboardingSeenProvider);
     final user = ref.watch(currentUserProvider);
+
+    if (seen.valueOrNull == false) {
+      return OnboardingScreen(onDone: () => markOnboardingSeen(ref));
+    }
 
     return user.when(
       loading: () => const _Splash(),
