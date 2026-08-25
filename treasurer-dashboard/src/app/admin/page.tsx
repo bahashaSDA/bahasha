@@ -2,25 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Shield,
-  Building2,
-  Users,
-  EyeOff,
-  Radio,
-  LogOut,
-  Moon,
-  Sun,
-  Eye,
-  Loader2,
-  ArrowLeft,
-} from "lucide-react";
+import { Shield, Building2, Users, EyeOff, Radio, Eye, Loader2 } from "lucide-react";
 import { BarChart, Bar, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { useTheme } from "@/components/theme-provider";
-import { signOut } from "@/lib/use-auth";
+import { Shell } from "@/components/dashboard/shell";
 import { formatKes, formatNumber } from "@/lib/utils";
 import {
   useIsSuperAdmin,
@@ -35,11 +22,10 @@ import {
   type RevealLog,
 } from "@/lib/use-admin";
 
-const PALETTE = ["#231F4F", "#89D385", "#6CD1F0", "#A1A1F7", "#2f9e44", "#e8a13a"];
+const PALETTE = ["#12b76a", "#2e90fa", "#7a5af8", "#f79009", "#ee46bc", "#15b8c4"];
 
 export default function AdminPage() {
   const router = useRouter();
-  const { theme, toggle } = useTheme();
   const { isSuperAdmin, loading, signedIn } = useIsSuperAdmin();
 
   const [churches, setChurches] = useState<ChurchSummary[]>([]);
@@ -121,7 +107,7 @@ export default function AdminPage() {
           </p>
           <button
             onClick={() => router.push("/dashboard")}
-            className="mt-4 rounded-lg bg-indigo px-4 py-2 text-sm text-white"
+            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm text-white"
           >
             Back to dashboard
           </button>
@@ -133,49 +119,14 @@ export default function AdminPage() {
   const chartData = churches.map((c) => ({ name: c.church_name.replace(/ SDA Church$/, ""), value: Number(c.total_given) }));
 
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl bg-indigo text-white">
-              <Shield className="size-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold leading-tight">Bahasha Super Admin</h1>
-              <p className="text-xs text-muted-foreground">Network oversight · all churches</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-            >
-              <ArrowLeft className="size-4" /> Treasurer view
-            </button>
-            <button onClick={toggle} aria-label="Theme" className="grid size-9 place-items-center rounded-lg border hover:bg-muted">
-              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </button>
-            <button
-              onClick={async () => {
-                await signOut();
-                router.push("/login");
-              }}
-              aria-label="Sign out"
-              className="grid size-9 place-items-center rounded-lg border hover:bg-muted"
-            >
-              <LogOut className="size-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+    <Shell title="Super Admin" subtitle="Network oversight · all churches">
+      <div className="space-y-5">
         {/* Network totals */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard index={0} label="Total received (network)" value={formatKes(totals.totalGiven)} icon={Building2} accent="indigo" />
-          <StatCard index={1} label="Churches" value={formatNumber(churches.length)} icon={Building2} accent="green" />
-          <StatCard index={2} label="Total givers" value={formatNumber(totals.givers)} sub={`${formatNumber(totals.anon)} anonymous`} icon={Users} accent="cyan" />
-          <StatCard index={3} label="Hubs online" value={`${totals.onlineHubs}/${totals.hubs}`} icon={Radio} accent="violet" />
+          <StatCard label="Total received (network)" value={formatKes(totals.totalGiven)} icon={Building2} accent="green" />
+          <StatCard label="Churches" value={formatNumber(churches.length)} icon={Building2} accent="slate" />
+          <StatCard label="Total givers" value={formatNumber(totals.givers)} sub={`${formatNumber(totals.anon)} anonymous`} icon={Users} accent="blue" />
+          <StatCard label="Hubs online" value={`${totals.onlineHubs}/${totals.hubs}`} icon={Radio} accent="violet" />
         </div>
 
         {/* Giving by church */}
@@ -351,7 +302,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </Shell>
   );
 }

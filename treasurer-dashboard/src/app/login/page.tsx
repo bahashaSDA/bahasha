@@ -37,7 +37,7 @@ export default function LoginPage() {
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="grid size-12 place-items-center rounded-2xl bg-indigo text-white">
+          <div className="grid size-12 place-items-center rounded-2xl bg-primary text-white">
             <Wallet className="size-6" />
           </div>
           <h1 className="mt-4 text-2xl font-semibold">Bahasha Treasurer</h1>
@@ -48,7 +48,7 @@ export default function LoginPage() {
           <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
             Supabase is not configured. Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
             <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in <code>.env.local</code>, or{" "}
-            <a href="/dashboard" className="font-medium text-indigo underline">
+            <a href="/dashboard" className="font-medium text-primary underline">
               continue with demo data
             </a>
             .
@@ -91,7 +91,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={busy}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
               Sign in

@@ -2,26 +2,19 @@
 
 import { useMemo } from "react";
 import {
-  CalendarDays,
-  CalendarRange,
-  CalendarClock,
   Wallet,
-  Download,
-  Moon,
-  Sun,
-  EyeOff,
+  CalendarClock,
   Users,
-  LogIn,
-  LogOut,
-  CreditCard,
+  UserPlus,
+  EyeOff,
+  Download,
+  FileText,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useContributions, downloadCsv } from "@/lib/use-contributions";
-import { useAuth, signOut } from "@/lib/use-auth";
-import { useIsSuperAdmin } from "@/lib/use-admin";
-import { Shield } from "lucide-react";
 import { computeMetrics } from "@/lib/analytics";
+import { exportReportPdf } from "@/lib/pdf";
 import { formatKes, formatNumber } from "@/lib/utils";
+import { Shell } from "@/components/dashboard/shell";
 import { StatCard } from "@/components/dashboard/stat-card";
 import {
   CategoryChart,
@@ -31,14 +24,9 @@ import {
 } from "@/components/dashboard/charts";
 import { TransactionsTable } from "@/components/dashboard/transactions-table";
 import { Badge } from "@/components/ui/badge";
-import { useTheme } from "@/components/theme-provider";
 
 export default function DashboardPage() {
   const { rows, source, loading } = useContributions();
-  const { theme, toggle } = useTheme();
-  const { email, configured } = useAuth();
-  const { isSuperAdmin } = useIsSuperAdmin();
-  const router = useRouter();
   const metrics = useMemo(() => computeMetrics(rows), [rows]);
 
   const anonShare =
@@ -47,178 +35,125 @@ export default function DashboardPage() {
           (metrics.visibility.secret / (metrics.visibility.open + metrics.visibility.secret)) * 100,
         )
       : 0;
+  const settleRate =
+    metrics.contributionCount > 0
+      ? Math.round((metrics.completedCount / metrics.contributionCount) * 100)
+      : 0;
 
   return (
-    <div className="min-h-dvh">
-      {/* Top bar */}
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl bg-indigo text-white">
-              <Wallet className="size-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold leading-tight">Bahasha Treasurer</h1>
-              <p className="text-xs text-muted-foreground">Giving analytics & reports</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+    <Shell
+      title="Overview"
+      subtitle="Giving analytics for your church"
+      actions={
+        <>
+          <span className="no-print mr-1 hidden sm:inline-flex">
             {source === "demo" ? <Badge variant="warning">Demo data</Badge> : <Badge variant="success">Live</Badge>}
-            {isSuperAdmin ? (
-              <button
-                onClick={() => router.push("/admin")}
-                className="inline-flex items-center gap-2 rounded-lg border border-indigo/30 bg-indigo/5 px-3 py-2 text-sm font-medium text-indigo hover:bg-indigo/10 dark:text-accent-violet"
-              >
-                <Shield className="size-4" /> Super Admin
-              </button>
-            ) : null}
-            {email ? (
-              <button
-                onClick={() => router.push("/payments")}
-                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-                title="Set up your church's MPESA paybill"
-              >
-                <CreditCard className="size-4" /> Payments
-              </button>
-            ) : null}
-            {email ? (
-              <span className="hidden text-sm text-muted-foreground lg:inline">{email}</span>
-            ) : null}
-            <button
-              onClick={() => downloadCsv(rows)}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-            >
-              <Download className="size-4" /> CSV
-            </button>
-            <button
-              onClick={toggle}
-              aria-label="Toggle theme"
-              className="grid size-9 place-items-center rounded-lg border hover:bg-muted"
-            >
-              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </button>
-            {email ? (
-              <button
-                onClick={async () => {
-                  await signOut();
-                  router.refresh();
-                }}
-                aria-label="Sign out"
-                className="grid size-9 place-items-center rounded-lg border hover:bg-muted"
-                title="Sign out"
-              >
-                <LogOut className="size-4" />
-              </button>
-            ) : configured ? (
-              <button
-                onClick={() => router.push("/login")}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo px-3 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                <LogIn className="size-4" /> Sign in
-              </button>
-            ) : null}
-          </div>
+          </span>
+          <button
+            onClick={() => exportReportPdf(metrics, "Your church")}
+            className="no-print inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-strong"
+          >
+            <FileText className="size-4" /> <span className="hidden sm:inline">Report</span> PDF
+          </button>
+          <button
+            onClick={() => downloadCsv(rows)}
+            className="no-print inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+          >
+            <Download className="size-4" /> CSV
+          </button>
+        </>
+      }
+    >
+      {source === "demo" ? (
+        <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+          Showing <strong>demo data</strong>. Sign in and record giving to see live figures. Secret
+          givers always appear as pseudonyms — their identity never reaches this dashboard.
         </div>
-      </header>
+      ) : null}
 
-      <main className="mx-auto max-w-7xl px-6 py-6">
-        {source === "demo" ? (
-          <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-            Showing <strong>demo data</strong>. Sign a treasurer in and populate the schema to see
-            live giving. Secret givers will appear as pseudonyms — their identity never reaches this
-            dashboard.
-          </div>
-        ) : null}
+      {/* KPI row */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total received"
+          value={formatKes(metrics.totalGiven)}
+          sub={`${formatNumber(metrics.completedCount)} settled of ${formatNumber(metrics.contributionCount)}`}
+          icon={Wallet}
+          accent="green"
+          trend={{ value: `${settleRate}% settled`, up: settleRate >= 80 }}
+        />
+        <StatCard
+          label="This month"
+          value={formatKes(metrics.totals.month)}
+          sub={`This week ${formatKes(metrics.totals.week)}`}
+          icon={CalendarClock}
+          accent="blue"
+        />
+        <StatCard
+          label="From members"
+          value={formatKes(metrics.membership.member)}
+          sub={`Visitors ${formatKes(metrics.membership.visitor)}`}
+          icon={Users}
+          accent="violet"
+        />
+        <StatCard
+          label="Anonymous giving"
+          value={`${anonShare}%`}
+          sub={formatKes(metrics.visibility.secret)}
+          icon={EyeOff}
+          accent="amber"
+        />
+      </section>
 
-        {/* Headline period totals */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Trend + side donuts */}
+      <section className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <TrendChart metrics={metrics} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
+          <MembershipChart metrics={metrics} />
+          <VisibilityChart metrics={metrics} />
+        </div>
+      </section>
+
+      {/* Categories + secondary stats */}
+      <section className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <CategoryChart metrics={metrics} />
+        </div>
+        <div className="grid grid-cols-1 gap-4">
           <StatCard
-            index={0}
             label="Today"
             value={formatKes(metrics.totals.today)}
-            icon={CalendarDays}
+            icon={CalendarClock}
             accent="green"
           />
           <StatCard
-            index={1}
-            label="This week"
-            value={formatKes(metrics.totals.week)}
-            icon={CalendarRange}
-            accent="cyan"
-          />
-          <StatCard
-            index={2}
-            label="This month"
-            value={formatKes(metrics.totals.month)}
-            icon={CalendarClock}
-            accent="violet"
-          />
-          <StatCard
-            index={3}
             label="This year"
             value={formatKes(metrics.totals.year)}
             icon={Wallet}
-            accent="indigo"
-          />
-        </div>
-
-        {/* Secondary stats */}
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            index={4}
-            label="Total received"
-            value={formatKes(metrics.totalGiven)}
-            sub={`${formatNumber(metrics.completedCount)} settled of ${formatNumber(metrics.contributionCount)}`}
-            icon={Wallet}
-            accent="indigo"
+            accent="slate"
           />
           <StatCard
-            index={5}
-            label="Anonymous giving"
-            value={`${anonShare}%`}
-            sub={formatKes(metrics.visibility.secret)}
-            icon={EyeOff}
-            accent="violet"
-          />
-          <StatCard
-            index={6}
-            label="From members"
-            value={formatKes(metrics.membership.member)}
-            icon={Users}
-            accent="green"
-          />
-          <StatCard
-            index={7}
             label="From visitors"
             value={formatKes(metrics.membership.visitor)}
-            icon={Users}
-            accent="cyan"
+            icon={UserPlus}
+            accent="blue"
           />
         </div>
+      </section>
 
-        {/* Charts */}
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <TrendChart metrics={metrics} />
-          <CategoryChart metrics={metrics} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-1">
-            <MembershipChart metrics={metrics} />
-            <VisibilityChart metrics={metrics} />
-          </div>
-        </div>
+      {/* Transactions */}
+      <section className="mt-5">
+        <TransactionsTable rows={metrics.recent.length ? rows : []} />
+      </section>
 
-        {/* Transactions */}
-        <div className="mt-6 grid grid-cols-1 gap-4">
-          <TransactionsTable rows={metrics.recent.length ? rows : []} />
-        </div>
+      {loading ? (
+        <p className="mt-6 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : null}
 
-        {loading ? (
-          <p className="mt-6 text-center text-sm text-muted-foreground">Loading…</p>
-        ) : null}
-
-        <footer className="mt-10 border-t pt-6 text-center text-xs text-muted-foreground">
-          © 2026 Bahasha
-        </footer>
-      </main>
-    </div>
+      <footer className="mt-10 border-t border-border pt-6 text-center text-xs text-muted-foreground">
+        © 2026 Bahasha
+      </footer>
+    </Shell>
   );
 }

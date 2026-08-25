@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Search } from "lucide-react";
+import { Search, FileDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatKes } from "@/lib/utils";
+import { exportInvoicePdf } from "@/lib/pdf";
 import type { ContributionRow, ContributionStatus } from "@/lib/analytics";
 
 const statusVariant: Record<ContributionStatus, "success" | "danger" | "warning" | "muted"> = {
@@ -67,12 +68,13 @@ export function TransactionsTable({ rows }: { rows: ContributionRow[] }) {
                 <th className="py-2.5 pr-4 font-medium">Categories</th>
                 <th className="py-2.5 pr-4 text-right font-medium">Amount</th>
                 <th className="py-2.5 pr-4 font-medium">Status</th>
-                <th className="py-2.5 font-medium">When</th>
+                <th className="py-2.5 pr-4 font-medium">When</th>
+                <th className="py-2.5 text-right font-medium">Receipt</th>
               </tr>
             </thead>
             <tbody>
               {shown.map((r) => (
-                <tr key={r.id} className="border-b last:border-0">
+                <tr key={r.id} className="border-b transition-colors last:border-0 hover:bg-muted/40">
                   <td className="py-3 pr-4">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
@@ -92,14 +94,23 @@ export function TransactionsTable({ rows }: { rows: ContributionRow[] }) {
                   <td className="py-3 pr-4">
                     <Badge variant={statusVariant[r.status]}>{r.status}</Badge>
                   </td>
-                  <td className="py-3 text-muted-foreground">
+                  <td className="py-3 pr-4 text-muted-foreground">
                     {format(new Date(r.received_at), "MMM d, HH:mm")}
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      onClick={() => exportInvoicePdf(r, "Your church")}
+                      title="Download receipt PDF"
+                      className="inline-grid size-8 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <FileDown className="size-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
               {shown.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
                     No transactions match “{query}”.
                   </td>
                 </tr>

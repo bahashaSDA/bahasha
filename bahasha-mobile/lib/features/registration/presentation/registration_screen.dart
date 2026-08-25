@@ -29,6 +29,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _church = TextEditingController();
+  final _churchFocus = FocusNode();
   bool _submitting = false;
 
   static const _welcomeFruits = <String>[
@@ -36,11 +37,50 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
     'assets/fruits/camp_budget.png', 'assets/fruits/mission.png',
   ];
 
+  // Suggestions for the church autocomplete. Anything typed that isn't here is
+  // still accepted and normalised to end with "SDA Church".
+  static const _churchSuggestions = <String>[
+    'Zetech University SDA Church',
+    'Jomo Kenyatta University (JKUAT) SDA Church',
+    'Kenyatta University SDA Church',
+    'KCA University SDA Church',
+    'University of Nairobi SDA Church',
+    'Maseno University SDA Church',
+    'Moi University SDA Church',
+    'Egerton University SDA Church',
+    'Technical University of Kenya SDA Church',
+    'Multimedia University SDA Church',
+    'Strathmore University SDA Church',
+    'Dedan Kimathi University SDA Church',
+    'Maasai Mara University SDA Church',
+    'Kabarak University SDA Church',
+    'Mount Kenya University SDA Church',
+  ];
+
+  /// Case/space/punctuation-insensitive key for matching.
+  static String _key(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+  /// Ensure a free-typed church name ends with "SDA Church" so records stay
+  /// consistent (member/visitor matching is itself space/case-insensitive).
+  static String _ensureSdaChurch(String raw) {
+    final s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (s.isEmpty) return s;
+    final lower = s.toLowerCase();
+    if (lower.endsWith('sda church')) return s;
+    if (lower.endsWith('church')) {
+      final stem = s.substring(0, s.length - 'church'.length).trimRight();
+      return lower.contains('sda') ? '$stem Church' : '$stem SDA Church';
+    }
+    if (lower.endsWith('sda')) return '$s Church';
+    return '$s SDA Church';
+  }
+
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
     _church.dispose();
+    _churchFocus.dispose();
     super.dispose();
   }
 
@@ -51,7 +91,7 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
       await ref.read(registrationRepositoryProvider).registerLocally(
             fullName: _name.text.trim(),
             phone: _phone.text.trim(),
-            churchId: _church.text.trim(), // the giver's home church (free text)
+            churchId: _ensureSdaChurch(_church.text), // home church, normalised to "… SDA Church"
             membershipStatus: 'member', // auto-reclassified per giving vs hub church
             visibility: 'open', // give openly by default
           );
@@ -121,8 +161,49 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
                 const SizedBox(height: 16),
 
                 _label('Church you belong to'),
-                _field(controller: _church, hint: 'e.g. Zetech University SDA Church', keyboard: TextInputType.text,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your church' : null),
+                RawAutocomplete<String>(
+                  textEditingController: _church,
+                  focusNode: _churchFocus,
+                  optionsBuilder: (value) {
+                    final q = _key(value.text);
+                    if (q.isEmpty) return const Iterable<String>.empty();
+                    return _churchSuggestions.where((c) => _key(c).contains(q));
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onSubmit) => TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    keyboardType: TextInputType.text,
+                    textCapitalization: TextCapitalization.words,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your church' : null,
+                    onFieldSubmitted: (_) => onSubmit(),
+                    style: const TextStyle(fontFamily: 'Inter', fontSize: 16, color: _ink),
+                    decoration: _decoration('Start typing, e.g. Zetech University'),
+                  ),
+                  optionsViewBuilder: (context, onSelected, options) => Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(14),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: 240, maxWidth: MediaQuery.of(context).size.width - 56),
+                        child: ListView(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          children: [
+                            for (final o in options)
+                              InkWell(
+                                onTap: () => onSelected(o),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  child: Text(o, style: const TextStyle(fontFamily: 'Inter', fontSize: 15, color: _ink)),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
                 const Spacer(),
                 GestureDetector(

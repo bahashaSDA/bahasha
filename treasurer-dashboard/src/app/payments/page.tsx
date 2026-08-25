@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, ShieldCheck, PlayCircle, BadgeCheck, Radio, KeyRound, Copy, Check, Eye, EyeOff } from "lucide-react";
+import { CheckCircle2, Loader2, ShieldCheck, PlayCircle, BadgeCheck, Radio, KeyRound, Copy, Check, Eye, EyeOff, Share2 } from "lucide-react";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { apiCall } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Shell } from "@/components/dashboard/shell";
 
 interface ConfigStatus {
   churchId: string;
@@ -135,6 +136,33 @@ export default function PaymentsPage() {
     }
   }
 
+  function hubKeyMessage(): string {
+    const key = hub?.apiKey ?? "";
+    const church = status?.churchName ?? "your church";
+    return (
+      `Bahasha Church Hub key for ${church}:\n\n${key}\n\n` +
+      `Open the CVendor app → "Set up your Church Hub" → paste this key → Pair hub. ` +
+      `Keep it private — it lets this phone collect offerings for the church.`
+    );
+  }
+
+  // Share the key to WhatsApp / any app via the native share sheet, with a
+  // WhatsApp deep-link fallback when Web Share isn't available (desktop).
+  async function shareHubKey() {
+    const key = hub?.apiKey;
+    if (!key) return;
+    const text = hubKeyMessage();
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: "Bahasha hub key", text });
+        return;
+      } catch {
+        /* user dismissed the share sheet — fall through to WhatsApp */
+      }
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
+
   async function refresh() {
     if (!churchId) return;
     setStatus(await apiCall<ConfigStatus>(`/churches/${churchId}/payment-config`));
@@ -191,35 +219,26 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div className="min-h-dvh">
-      <header className="border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <button onClick={() => router.push("/dashboard")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted">
-            <ArrowLeft className="size-4" /> Dashboard
-          </button>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">Payment setup</h1>
-            <p className="text-xs text-muted-foreground">{status?.churchName ?? "Your church"}</p>
-          </div>
-          <div className="ml-auto">
-            {status?.validated ? (
-              <Badge variant="success">Verified</Badge>
-            ) : status?.configured ? (
-              <Badge variant="warning">Test needed</Badge>
-            ) : (
-              <Badge variant="muted">Not set up</Badge>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl space-y-6 px-6 py-6">
+    <Shell
+      title="Payments & Hub"
+      subtitle={status?.churchName ?? "Your church"}
+      actions={
+        status?.validated ? (
+          <Badge variant="success">Verified</Badge>
+        ) : status?.configured ? (
+          <Badge variant="warning">Test needed</Badge>
+        ) : (
+          <Badge variant="muted">Not set up</Badge>
+        )
+      }
+    >
+      <div className="mx-auto max-w-3xl space-y-6">
         {error ? <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div> : null}
         {notice ? <div className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm">{notice}</div> : null}
 
         <Card>
           <CardHeader className="flex-row items-center gap-2">
-            <ShieldCheck className="size-5 text-indigo dark:text-accent-violet" />
+            <ShieldCheck className="size-5 text-primary" />
             <CardTitle className="text-base text-foreground">Your MPESA credentials</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -260,7 +279,7 @@ export default function PaymentsPage() {
 
             <button onClick={save}
               disabled={busy !== null || !shortcode || (!passkey && !status?.hasPasskey)}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
               {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
               Save credentials
             </button>
@@ -296,7 +315,7 @@ export default function PaymentsPage() {
         {/* Church Hub (CVendor) — one-click key generation */}
         <Card>
           <CardHeader className="flex-row items-center gap-2">
-            <Radio className="size-5 text-indigo dark:text-accent-violet" />
+            <Radio className="size-5 text-primary" />
             <CardTitle className="text-base text-foreground">Church Hub (CVendor device)</CardTitle>
             <div className="ml-auto">
               {hub?.exists ? (
@@ -345,6 +364,10 @@ export default function PaymentsPage() {
                     {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
                     {copied ? "Copied" : "Copy"}
                   </button>
+                  <button onClick={shareHubKey} title="Share via WhatsApp, email, or any app"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#25D366] px-3 py-2 text-sm font-medium text-white hover:opacity-90">
+                    <Share2 className="size-4" /> Share
+                  </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Saved securely (encrypted) — come back and copy it anytime. Give it to your deacon to paste into CVendor.
@@ -358,7 +381,7 @@ export default function PaymentsPage() {
             ) : null}
 
             <button onClick={generateHubKey} disabled={busy !== null}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
               {busy === "hub" ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
               {hub?.exists ? "Regenerate hub key" : "Generate hub key"}
             </button>
@@ -374,7 +397,7 @@ export default function PaymentsPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-base text-foreground">Don&apos;t have these yet?</CardTitle>
-            <button onClick={() => setShowGuide((v) => !v)} className="text-sm text-indigo underline dark:text-accent-violet">
+            <button onClick={() => setShowGuide((v) => !v)} className="text-sm text-primary underline">
               {showGuide ? "Hide guide" : "Show step-by-step"}
             </button>
           </CardHeader>
@@ -394,7 +417,7 @@ export default function PaymentsPage() {
                 <li>Send a KSh 1 test to confirm. Done — you never have to do this again.</li>
               </ol>
               <a href={VIDEO_GUIDE_URL} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90">
                 <PlayCircle className="size-4" /> Watch a video guide
               </a>
               <p className="text-xs text-muted-foreground">
@@ -404,8 +427,8 @@ export default function PaymentsPage() {
             </CardContent>
           ) : null}
         </Card>
-      </main>
-    </div>
+      </div>
+    </Shell>
   );
 }
 

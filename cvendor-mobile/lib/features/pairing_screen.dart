@@ -4,10 +4,9 @@ import '../core/providers.dart';
 import '../core/hub_session.dart';
 import '../theme.dart';
 
-/// One-time hub pairing. A deacon enters the API key their treasurer/admin
-/// issued (provisioned by scripts/provision-hub.ts). The key is validated for
-/// shape and stored in the secure keystore; from then on the hub goes straight
-/// to the dashboard on launch.
+/// One-time hub pairing, in the offertory look: a deacon enters the API key the
+/// treasurer shared (from the dashboard). The key is validated and stored in the
+/// secure keystore; from then on the hub opens straight to the dashboard.
 class PairingScreen extends ConsumerStatefulWidget {
   const PairingScreen({super.key});
 
@@ -48,71 +47,82 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: HubColors.panelGreen,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-          children: <Widget>[
-            const Icon(Icons.hub_outlined, size: 56, color: HubColors.indigo),
-            const SizedBox(height: 20),
-            const Text('Set up your Church Hub',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: HubColors.ink)),
-            const SizedBox(height: 8),
-            const Text(
-              'This device becomes the collection point for your church. Enter the '
-              'hub key your treasurer gave you to begin receiving contributions.',
-              style: TextStyle(fontSize: 15, color: HubColors.inkMuted, height: 1.4),
-            ),
-            const SizedBox(height: 32),
-            _field(_church, 'Church name (optional)', 'e.g. Zetech University SDA'),
-            const SizedBox(height: 16),
-            _field(_key, 'Hub key', 'bhk_…', mono: true),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: HubColors.danger)),
-            ],
-            const SizedBox(height: 28),
-            SizedBox(
-              height: 54,
-              child: FilledButton(
-                onPressed: _saving ? null : _pair,
-                style: FilledButton.styleFrom(
-                  backgroundColor: HubColors.indigo,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: HubColors.surface,
+      body: FruitBackdrop(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(28, 56, 28, 28),
+            children: <Widget>[
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0x1A008805),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Pair hub', style: TextStyle(fontSize: 17, color: Colors.white)),
+                child: const Icon(Icons.sensors, size: 34, color: HubColors.green),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              const Text('Set up your Church Hub',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 28, fontWeight: FontWeight.w600, color: HubColors.ink)),
+              const SizedBox(height: 10),
+              const Text(
+                'This device becomes the collection point for your church. Enter the '
+                'hub key your treasurer shared to begin receiving offerings over Bluetooth.',
+                style: TextStyle(fontFamily: 'Inter', fontSize: 15, color: HubColors.inkMuted, height: 1.45),
+              ),
+              const SizedBox(height: 32),
+              _label('Church name (optional)'),
+              _field(_church, 'e.g. Zetech University SDA Church'),
+              const SizedBox(height: 18),
+              _label('Hub key'),
+              _field(_key, 'bhk_…', mono: true),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(fontFamily: 'Inter', color: HubColors.danger)),
+              ],
+              const SizedBox(height: 30),
+              GestureDetector(
+                onTap: _saving ? null : _pair,
+                child: Container(
+                  height: 56,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: HubColors.green, borderRadius: BorderRadius.circular(62)),
+                  child: _saving
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Pair hub',
+                          style: TextStyle(fontFamily: 'Inter', fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Center(child: Text('© 2026 Bahasha',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: Color(0x73000000)))),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _field(TextEditingController c, String label, String hint, {bool mono = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(label, style: const TextStyle(fontSize: 14, color: HubColors.inkMuted)),
-        const SizedBox(height: 6),
-        TextField(
-          controller: c,
-          style: TextStyle(fontFamily: mono ? 'monospace' : null, fontSize: 16),
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Text(text, style: const TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.w500, color: HubColors.ink)),
+      );
+
+  Widget _field(TextEditingController c, String hint, {bool mono = false}) => TextField(
+        controller: c,
+        style: TextStyle(fontFamily: mono ? 'monospace' : 'Inter', fontSize: 16, color: HubColors.ink),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(fontFamily: 'Inter', color: Color(0x80000000)),
+          filled: true,
+          fillColor: const Color(0xFFF5F5F7),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: HubColors.green, width: 1.5),
           ),
         ),
-      ],
-    );
-  }
+      );
 }

@@ -84,21 +84,23 @@ class _HubDashboardScreenState extends ConsumerState<HubDashboardScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: <Widget>[
-          _StatusBanner(status: _bleStatus),
-          const SizedBox(height: 16),
-          _TodayCard(db: db),
-          const SizedBox(height: 16),
-          const Text('Pending upload', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          _PendingList(db: db),
-          const SizedBox(height: 16),
-          const Text('Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          _ActivityLog(db: db),
-        ],
+      body: FruitBackdrop(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            _StatusBanner(status: _bleStatus),
+            const SizedBox(height: 16),
+            _TodayCard(db: db),
+            const SizedBox(height: 16),
+            const Text('Pending upload', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: HubColors.ink)),
+            const SizedBox(height: 8),
+            _PendingList(db: db),
+            const SizedBox(height: 16),
+            const Text('Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: HubColors.ink)),
+            const SizedBox(height: 8),
+            _ActivityLog(db: db),
+          ],
+        ),
       ),
     );
   }
@@ -111,19 +113,21 @@ class _StatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ok = status.contains('Advertising') || status.contains('ready');
+    final fg = ok ? Colors.white : HubColors.ink;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: ok ? HubColors.green : HubColors.warning,
-        borderRadius: BorderRadius.circular(16),
+        color: ok ? HubColors.green : const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: ok ? const [BoxShadow(color: Color(0x22008805), blurRadius: 14, offset: Offset(0, 6))] : null,
       ),
       child: Row(
         children: <Widget>[
-          Icon(ok ? Icons.bluetooth_connected : Icons.bluetooth_searching, color: HubColors.ink),
+          Icon(ok ? Icons.bluetooth_connected : Icons.bluetooth_searching, color: fg),
           const SizedBox(width: 12),
           Expanded(
             child: Text(status,
-                style: const TextStyle(color: HubColors.ink, fontSize: 16, fontWeight: FontWeight.w500)),
+                style: TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w500)),
           ),
         ],
       ),
@@ -145,11 +149,11 @@ class _TodayCard extends StatelessWidget {
         final pending = rows.where((r) => r.status == 'received' || r.status == 'failed').length;
         return Row(
           children: <Widget>[
-            _stat('Uploaded', '$uploaded', HubColors.indigo),
+            _stat('Uploaded', '$uploaded', HubColors.green),
             const SizedBox(width: 12),
-            _stat('Pending', '$pending', HubColors.cyan),
+            _stat('Pending', '$pending', HubColors.warning),
             const SizedBox(width: 12),
-            _stat('Total', '${rows.length}', HubColors.violet),
+            _stat('Total', '${rows.length}', HubColors.ink),
           ],
         );
       },
@@ -159,7 +163,7 @@ class _TodayCard extends StatelessWidget {
   Widget _stat(String label, String value, Color color) => Expanded(
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: HubColors.border)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -192,7 +196,7 @@ class _PendingList extends StatelessWidget {
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: HubColors.border)),
               child: Row(
                 children: <Widget>[
                   Icon(_statusIcon(r.status), size: 20, color: _statusColor(r.status)),
@@ -271,6 +275,6 @@ class _ActivityLog extends StatelessWidget {
 Widget _muted(String text) => Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: HubColors.border)),
       child: Text(text, style: const TextStyle(color: HubColors.inkMuted)),
     );

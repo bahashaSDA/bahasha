@@ -19,7 +19,7 @@ import type { Metrics } from "@/lib/analytics";
 
 // The Bahasha accent palette, reused across every chart so series colours are
 // consistent with the mobile app.
-const PALETTE = ["#231F4F", "#89D385", "#6CD1F0", "#A1A1F7", "#2f9e44", "#e8a13a"];
+const PALETTE = ["#12b76a", "#2e90fa", "#7a5af8", "#f79009", "#ee46bc", "#15b8c4"];
 
 function MoneyTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -44,8 +44,8 @@ export function TrendChart({ metrics }: { metrics: Metrics }) {
             <AreaChart data={metrics.trend} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#89D385" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="#89D385" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#12b76a" stopOpacity={0.45} />
+                  <stop offset="100%" stopColor="#12b76a" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={28} fontSize={12} />
@@ -60,8 +60,8 @@ export function TrendChart({ metrics }: { metrics: Metrics }) {
               <Area
                 type="monotone"
                 dataKey="amount"
-                stroke="#2f7d3a"
-                strokeWidth={2}
+                stroke="#039855"
+                strokeWidth={2.5}
                 fill="url(#trendFill)"
               />
             </AreaChart>
@@ -167,10 +167,10 @@ export function MembershipChart({ metrics }: { metrics: Metrics }) {
     <Donut
       title="Member vs visitor"
       data={[
-        { name: "Members", value: m.member, color: "#231F4F" },
-        { name: "Visitors", value: m.visitor, color: "#6CD1F0" },
-        { name: "Other church", value: m.other, color: "#A1A1F7" },
-        { name: "Anonymous", value: m.unknown, color: "#89D385" },
+        { name: "Members", value: m.member, color: "#12b76a" },
+        { name: "Visitors", value: m.visitor, color: "#2e90fa" },
+        { name: "Other church", value: m.other, color: "#7a5af8" },
+        { name: "Anonymous", value: m.unknown, color: "#cbd5e1" },
       ]}
     />
   );
@@ -182,8 +182,8 @@ export function VisibilityChart({ metrics }: { metrics: Metrics }) {
     <Donut
       title="Open vs secret giving"
       data={[
-        { name: "Open giving", value: v.open, color: "#89D385" },
-        { name: "Secret giving", value: v.secret, color: "#231F4F" },
+        { name: "Open giving", value: v.open, color: "#12b76a" },
+        { name: "Secret giving", value: v.secret, color: "#0f1524" },
       ]}
     />
   );
