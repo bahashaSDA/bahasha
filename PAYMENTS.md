@@ -79,3 +79,45 @@ Set these in Vercel → backend project → Settings → Environment Variables, 
 - Are churches' tills onboarded under our merchant so `PartyB` routes?
 - Current per-transaction / daily limits.
 - Whether our account needs aggregator/partner authorization to collect for others.
+
+## 8. How a church gets a business Till (Buy Goods, settling to a BANK)
+
+> Get a **business till that settles to a bank account** — not a basic personal
+> till — so it never stalls at the ~KSh 500,000 M-Pesa wallet cap on a big
+> offering day.
+
+**Where to apply (any one):**
+- The **M-PESA Business app** (download from Play Store / App Store), or
+- **lipa.m-pesa.com** (Lipa na M-PESA online application), or
+- A **Safaricom shop** (walk in — easiest for organizations).
+
+**Documents the church needs (as an organization):**
+- **Registration certificate** — church/society registration (Registrar of
+  Societies), or NGO/company registration certificate.
+- **KRA PIN certificate** of the church/organization.
+- **National IDs** of the authorized signatories/officials.
+- **Bank account details** of the church (for settlement).
+- Passport photos of signatories (sometimes requested).
+- A **phone number** to be the till administrator.
+
+**Steps:**
+1. Apply for **"Lipa na M-PESA → Buy Goods (Till Number)"** as an
+   **Organization/Business** (not personal).
+2. Submit the documents above.
+3. **Choose settlement to the BANK ACCOUNT** (critical — this is what avoids the
+   wallet cap and lets it receive high volume all day).
+4. Safaricom reviews (usually a few business days) and issues a **Till number**
+   plus a **Store / Head-office number**.
+5. Set the **Lipa na M-PESA Manager PIN**; manage the till via the **M-PESA
+   Business app** or the **Business Portal** (org.m-pesa.com).
+6. Give Bahasha the **Till number** (that's all that's needed for *Till mode*).
+
+**Notes:**
+- Registration itself is free. Buy Goods transactions carry Safaricom **merchant
+  tariffs** (a small fee on amounts received) — confirm current rates with
+  Safaricom.
+- For **Direct mode** instead (paybill/till + passkey), the church additionally
+  does a one-time **Daraja "Go Live"** to obtain the passkey.
+- For **very high-volume** churches, a **PayBill** (also org-registered, settles
+  to bank) is the sturdiest option — but that uses **Direct mode**, not the
+  shared-Till trick.
