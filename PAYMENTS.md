@@ -35,6 +35,24 @@ The payments page should offer **both**; a church picks whichever fits.
 - The passkey is tied to one shortcode; you can't STK-push to a shortcode you
   don't hold the passkey for (unless via the linked-till `PartyB` route above).
 
+## 2b. Creating MY OWN platform credentials on m-pesaforbusiness.co.ke
+
+When registering the platform's own merchant account (to "Go Live"):
+
+- **Product → M-PESA Business Till (Buy Goods Till)** — NOT Short-Term Paybill.
+  Buy Goods gives a Store/HO number + Till + the online passkey and supports the
+  `CustomerBuyGoodsOnline` STK with a separate `PartyB` (needed for Till mode).
+  Short-Term Paybill is a temporary fundraising paybill and can't route `PartyB`.
+- **Settlement → "Settle to owner's Bank"** — NOT "Settle to owner's M-PESA".
+  Bank settlement avoids the ~KSh 500,000 wallet cap.
+- Register under the **business/organization** (Bahasha) if offered, with the
+  business registration cert + KRA PIN + bank account.
+- **Then** on Daraja (developer.safaricom.co.ke): create an app → **Go Live** →
+  verification type **Till (Buy Goods)** → link this till → obtain the production
+  **Consumer Key, Consumer Secret, Passkey** (the env vars in §3).
+- To route money to OTHER churches' tills via `PartyB`, Safaricom must **link
+  those tills under our merchant/aggregator** — a separate, later step.
+
 ## 3. What I MUST provide when ready (server env vars on the Vercel backend)
 
 These already exist as keys in `backend/.env` / `src/config/env.ts`:
