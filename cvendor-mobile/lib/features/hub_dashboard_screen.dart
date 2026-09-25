@@ -8,6 +8,7 @@ import '../core/ingest_client.dart';
 import '../core/upload_service.dart';
 import '../core/ble_receiver.dart';
 import '../theme.dart';
+import 'prayer_card.dart';
 
 /// The hub's operational dashboard. Once paired, the deacon leaves this running
 /// during the service: it advertises over BLE, receives contributions, queues
@@ -91,6 +92,8 @@ class _HubDashboardScreenState extends ConsumerState<HubDashboardScreen> {
             _StatusBanner(status: _bleStatus),
             const SizedBox(height: 16),
             _TodayCard(db: db),
+            const SizedBox(height: 16),
+            const PrayerRequestsCard(),
             const SizedBox(height: 16),
             const Text('Pending upload', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: HubColors.ink)),
             const SizedBox(height: 8),
