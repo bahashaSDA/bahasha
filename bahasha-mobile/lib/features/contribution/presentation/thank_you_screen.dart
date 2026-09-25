@@ -1,64 +1,63 @@
 import 'package:flutter/material.dart';
+import '../../../core/design/icon.dart';
 import '../../../core/design/pixel_canvas.dart';
-import 'widgets/offerings_header.dart';
+import '../../../core/design/type.dart';
+import '../../../core/theme/app_colors.dart';
+import 'widgets/amount_text.dart';
 
-/// The thank-you screen — pixel-perfect to the Figma frame (node 14:135): a
-/// blessing, hands holding the full offertory basket, and a "Give again" action
-/// that returns home for a fresh basket. The E-receipts row from the Figma is
-/// intentionally omitted per product direction.
+/// Shown once an offering has been signed into the outbox. The Figma has no
+/// frame for this state, so it reuses the Send frame's exact structure: the
+/// centred title (top 189), the ExtraLight figure (top 315), and the blue
+/// text action with its plane at the bottom (89/304, 836) — here "Give
+/// again", which returns to a fresh keypad.
 class ThankYouScreen extends StatelessWidget {
-  const ThankYouScreen({super.key});
+  const ThankYouScreen({super.key, required this.total, this.prayerQueued = false, this.prayerFailed = false});
+
+  final int total;
+  final bool prayerQueued;
+  final bool prayerFailed;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: PixelCanvas(
-        background: Colors.white,
-        scrollable: true,
-        contentHeight: 912,
-        builder: (context, px) => [
-          ...offeringsHeader(context, px),
+    final note = prayerQueued
+        ? 'Your prayer is with the prayer team for this Sabbath.'
+        : prayerFailed
+            ? 'Your offering was saved, but your prayer could not be kept. Please add it again next time.'
+            : null;
 
-          px.text(66, 172, 'Dearly beloved of the Lord, be blessed.',
-              size: 20, weight: FontWeight.w300, color: Colors.black, width: 311,
-              height: 1.3, fontFamily: 'Inter'),
+    void home() => Navigator.of(context).popUntil((r) => r.isFirst);
 
-          px.at(0.5, 252, width: 419, height: 419,
-              child: Image.asset('assets/baskets/basket_hands.png', fit: BoxFit.contain)),
-
-          px.at(0, 805, width: 420, child: Center(child: _GiveAgainPill(
-            onTap: () => Navigator.of(context).popUntil((r) => r.isFirst),
-          ))),
-        ],
-      ),
-    );
-  }
-}
-
-class _GiveAgainPill extends StatelessWidget {
-  const _GiveAgainPill({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = MediaQuery.of(context).size.width / 420;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 32 * scale, vertical: 20 * scale),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(62 * scale),
-          boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 3.5, offset: Offset(0, 1))],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) home();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: PixelCanvas(
+          background: Colors.white,
+          fit: true,
+          builder: (context, px) => [
+            px.text(0, 189, 'Thank you', size: 24, weight: BType.light, color: Colors.black,
+                width: 420, align: TextAlign.center, fontFamily: BType.family, height: null),
+            px.at(0, 315, width: 420, child: AmountText(amount: total, scale: px.scale)),
+            px.text(60, 485, 'Dearly beloved of the Lord, be blessed.', size: 20, weight: BType.light,
+                color: Colors.black, width: 300, align: TextAlign.center, fontFamily: BType.family, height: 1.35),
+            if (note != null)
+              px.text(60, 590, note, size: 16, weight: BType.light,
+                  color: prayerFailed ? AppColors.red : AppColors.wheelGrey,
+                  width: 300, align: TextAlign.center, fontFamily: BType.family, height: 1.35),
+            px.at(70, 818, width: 300, height: 70, child: Semantics(
+              button: true,
+              label: 'Give again',
+              child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: home, child: const SizedBox.expand()),
+            )),
+            px.text(89, 836, 'Give again', size: 24, weight: BType.light, color: AppColors.blue,
+                fontFamily: BType.family, height: null),
+            px.at(304, 834, width: 36, height: 36,
+                child: IgnorePointer(child: DesignIcon('send', scale: px.scale, size: 36, tint: false))),
+          ],
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text('Give again',
-              style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w400,
-                  fontSize: 16 * scale, color: const Color(0xFF008805))),
-          SizedBox(width: 10 * scale),
-          Icon(Icons.refresh, size: 17 * scale, color: const Color(0xFF008805)),
-        ]),
       ),
     );
   }

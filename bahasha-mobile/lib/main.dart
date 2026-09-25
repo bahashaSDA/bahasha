@@ -6,11 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'app_root.dart';
+import 'features/tour/tour_overlay.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // The panel is light and the giving surface flows edge to edge; a transparent
-  // status bar with dark icons keeps the top of the design clean on every phone.
   // The offertory redesign is white edge to edge; keep the system bars white
   // with dark icons so the chrome disappears into the design on every phone.
   SystemChrome.setSystemUIOverlayStyle(
@@ -33,6 +32,10 @@ class BahashaApp extends StatelessWidget {
       title: 'Bahasha',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      navigatorKey: appNavigatorKey,
+      // The first-run guided tour sits above every route so it can dim the
+      // real screens and point at their controls.
+      builder: (context, child) => TourHost(child: child ?? const SizedBox.shrink()),
       home: const AppRoot(),
     );
   }

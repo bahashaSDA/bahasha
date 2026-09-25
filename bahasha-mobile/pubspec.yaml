@@ -66,7 +66,6 @@ flutter_launcher_icons:
   ios: false
   image_path: "assets/icon/icon.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/icon/icon_fg.png"
   min_sdk_android: 21
 
 flutter:
@@ -75,9 +74,22 @@ flutter:
   assets:
     - assets/icons/
     - assets/fruits/
-    - assets/baskets/
+    - assets/menu/
 
   fonts:
+    # Elms Sans is the typeface of the current Figma (keypad / wheel redesign).
+    # Open Font License (assets/fonts/ElmsSans-OFL.txt). Variable font: weights
+    # (ExtraLight 200 · Light 300 · Regular 400 · Medium 500) are selected via
+    # FontVariation('wght') in core/design/type.dart.
+    - family: ElmsSans
+      fonts:
+        - asset: assets/fonts/ElmsSans.ttf
+    # The Figma keypad digits are set in Dotum (proprietary, not bundleable).
+    # Nanum Gothic is the closest open (OFL) Korean-gothic match; subset to
+    # Basic Latin so it adds ~30 KB. See assets/fonts/NanumGothic-OFL.txt.
+    - family: KeypadDigits
+      fonts:
+        - asset: assets/fonts/KeypadDigits.ttf
     # Inter is the typeface in the current Figma (the fruit/offertory design).
     # Bundled as the variable font; weights are selected via FontVariation in
     # PixelCanvas so Light (300) and Regular (400) render exactly as designed.

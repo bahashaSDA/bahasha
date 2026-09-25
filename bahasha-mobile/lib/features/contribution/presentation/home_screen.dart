@@ -1,153 +1,232 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/design/icon.dart';
 import '../../../core/design/pixel_canvas.dart';
-import '../../../core/providers.dart';
+import '../../../core/design/type.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../tour/tour_controller.dart';
 import '../application/basket_controller.dart';
 import '../domain/contribution_category.dart';
-import 'category_amount_screen.dart';
-import 'checkout_screen.dart';
-import 'widgets/offerings_header.dart';
+import 'menu_screen.dart';
+import 'send_screen.dart';
+import 'widgets/amount_text.dart';
+import 'widgets/design_wheel.dart';
 
-/// The Bahasha home / offertory screen — pixel-perfect to the new Figma
-/// (node 6:20). A two-column grid of fruit tiles, each a giving type; choosing a
-/// fruit opens its amount screen and adds it to the offertory basket. A floating
-/// "My offertory basket" pill opens the checkout.
-class HomeScreen extends ConsumerWidget {
+/// Home — pixel-perfect to the Figma Home frame (621:5) and, in place of the
+/// keypad, the Category frame (621:54).
+///
+/// The centred title is the category being given to and the figure below it
+/// is that category's amount. The keypad types whole shillings straight into
+/// the basket; the capsule key opens the category wheel, where the arrow
+/// selects. Every category keeps its own amount, so one gift can cover
+/// several. The send icon (top right) reviews the basket on the Send screen.
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
-  // Per-tile geometry, in seed order, straight from Figma: image
-  // (left, top, size) then label (left, top).
-  static const List<_Tile> _tiles = <_Tile>[
-    _Tile(56.59, 241, 145.79, 110, 384), // tithe
-    _Tile(246, 241, 143, 287, 384), // offering
-    _Tile(66.65, 442, 124.67, 73, 568), // church budget
-    _Tile(251.63, 442, 129.93, 264, 568), // camp offering
-    _Tile(66.65, 628, 124.67, 78, 754), // camp budget
-    _Tile(254.65, 628, 124.67, 289, 754), // mission
-    _Tile(76.7, 819.96, 104.95, 75, 922), // development
-    _Tile(262.05, 814, 110.95, 256, 922), // children ministry
-    _Tile(77.7, 986.96, 104.95, 78, 1089), // women ministry
-    _Tile(264.67, 987, 104.33, 265, 1089), // adventist men
-  ];
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  /// Figma Category frame geometry (621:54).
+  static const _wheel = WheelGeometry(
+    prevTop: 535, cardTop: 593, nextTop: 712,
+    cardLeft: 68, textLeft: 94, trailingLeft: 315,
+  );
+
+  int _focus = 0; // wheel position while picking
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final categories = ref.watch(categoriesProvider);
-    final basket = ref.watch(basketProvider);
-    final user = ref.watch(currentUserProvider).valueOrNull;
-    final firstName = (user?.fullName ?? '').trim().split(' ').first;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          PixelCanvas(
-            background: Colors.white,
-            scrollable: true,
-            // Extra tail room so the last row clears the pinned button on full scroll.
-            contentHeight: 1230,
-            builder: (context, px) => [
-              ...offeringsHeader(context, px),
-
-              px.text(66, 172,
-                  firstName.isEmpty ? 'Hello, what will you give?' : 'Hello $firstName, what will you give?',
-                  size: 20, weight: FontWeight.w300, color: Colors.black, fontFamily: 'Inter'),
-
-              for (var i = 0; i < categories.length && i < _tiles.length; i++)
-                ..._tile(context, px, categories[i], _tiles[i], basket.isSelected(categories[i].code)),
-            ],
-          ),
-
-          // "My offertory basket" stays pinned to the bottom while the grid
-          // scrolls behind it — it never rides up into the middle.
-          Positioned(
-            left: 0, right: 0, bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Center(child: _BasketPill(
-                  count: basket.amounts.length,
-                  onTap: () => _openBasket(context, ref),
-                )),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final done = await ref.read(tourDoneProvider.future);
+      if (!done && mounted) ref.read(tourProvider.notifier).start();
+    });
   }
 
-  List<Widget> _tile(BuildContext context, Px px, ContributionCategory c, _Tile t, bool selected) {
-    return [
-      px.at(t.left, t.top, width: t.size, height: t.size, child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _openAmount(context, c),
-        child: Stack(children: [
-          Positioned.fill(child: Image.asset(c.asset, fit: BoxFit.contain)),
-          if (selected)
-            Positioned(right: 0, top: 0, child: Container(
-              padding: EdgeInsets.all(2 * px.scale),
-              decoration: const BoxDecoration(color: Color(0xFF008805), shape: BoxShape.circle),
-              child: Icon(Icons.check, size: 14 * px.scale, color: Colors.white),
-            )),
-        ]),
-      )),
-      px.text(t.labelLeft, t.labelTop, c.name, size: 16, weight: FontWeight.w400,
-          color: Colors.black, fontFamily: 'Inter'),
-    ];
+  List<ContributionCategory> get _order => wheelOrder(ref.read(categoriesProvider));
+
+  void _openPicker() => ref.read(homePickingProvider.notifier).state = true;
+
+  void _select(int index) {
+    ref.read(currentCategoryProvider.notifier).state = _order[index].code;
+    ref.read(homePickingProvider.notifier).state = false;
   }
 
-  Future<void> _openAmount(BuildContext context, ContributionCategory category) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CategoryAmountScreen(category: category)),
-    );
+  void _press(String code, int digit) {
+    HapticFeedback.selectionClick();
+    final basket = ref.read(basketProvider.notifier);
+    basket.setAmount(code, KeypadInput.press(ref.read(basketProvider).amountFor(code), digit));
   }
 
-  void _openBasket(BuildContext context, WidgetRef ref) {
+  void _backspace(String code, {bool all = false}) {
+    HapticFeedback.selectionClick();
+    final current = ref.read(basketProvider).amountFor(code);
+    ref.read(basketProvider.notifier).setAmount(code, all ? 0 : KeypadInput.backspace(current));
+  }
+
+  void _openSend() {
     if (ref.read(basketProvider).isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a fruit to add to your basket first')),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(designSnack(context, 'Enter an amount to give first'));
       return;
     }
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CheckoutScreen()));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SendScreen()));
   }
-}
-
-class _Tile {
-  const _Tile(this.left, this.top, this.size, this.labelLeft, this.labelTop);
-  final double left, top, size, labelLeft, labelTop;
-}
-
-/// The white "My offertory basket" pill with the designed shadow and green text.
-class _BasketPill extends StatelessWidget {
-  const _BasketPill({required this.count, required this.onTap});
-  final int count;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scale = MediaQuery.of(context).size.width / 420;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 32 * scale, vertical: 20 * scale),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(62 * scale),
-          boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 3.5, offset: Offset(0, 1))],
-        ),
-        child: Text(
-          count > 0 ? 'My offertory basket ($count)' : 'My offertory basket',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w400,
-            fontSize: 16 * scale,
-            color: const Color(0xFF008805),
-          ),
+    final picking = ref.watch(homePickingProvider);
+    final basket = ref.watch(basketProvider);
+    final order = wheelOrder(ref.watch(categoriesProvider));
+    final currentCode = ref.watch(currentCategoryProvider);
+    // Whoever opens the wheel (the capsule key or the guided tour), it opens
+    // on the category currently being typed into.
+    ref.listen<bool>(homePickingProvider, (was, now) {
+      if (now && was != true) {
+        final i = _order.indexWhere((c) => c.code == ref.read(currentCategoryProvider));
+        setState(() => _focus = i < 0 ? 0 : i);
+      }
+    });
+    final shown = picking
+        ? order[_focus.clamp(0, order.length - 1)]
+        : order.firstWhere((c) => c.code == currentCode, orElse: () => order.first);
+    final amount = basket.amountFor(shown.code);
+
+    return PopScope(
+      canPop: !picking,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && picking) ref.read(homePickingProvider.notifier).state = false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: PixelCanvas(
+          background: Colors.white,
+          fit: true,
+          builder: (context, px) => [
+            // Menu (62, 85) — two lines, black.
+            px.at(62 - 12, 85 - 12, width: 48, height: 48, child: _Tap(
+              key: TourKeys.homeMenu,
+              label: 'Menu',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MenuScreen())),
+              child: DesignIcon('menu_lines', scale: px.scale, tint: false),
+            )),
+            // Send (339, 79) — the blue paper plane.
+            px.at(339 - 6, 79 - 6, width: 48, height: 48, child: _Tap(
+              key: TourKeys.homeSend,
+              label: 'Review and send',
+              onTap: _openSend,
+              child: DesignIcon('send', scale: px.scale, size: 36, tint: false),
+            )),
+
+            // Title + amount (tour anchor spans both).
+            px.at(60, 170, width: 300, height: 215, child: SizedBox(key: TourKeys.homeAmount)),
+            px.text(0, 189, shown.name, size: 24, weight: BType.light, color: Colors.black,
+                width: 420, align: TextAlign.center, fontFamily: BType.family, height: null),
+            px.at(0, 315, width: 420, child: AmountText(amount: amount, scale: px.scale)),
+
+            if (!picking) ..._keypad(px, shown.code) else ..._picker(px, order, basket),
+          ],
         ),
       ),
     );
   }
+
+  List<Widget> _keypad(Px px, String code) {
+    // Glyph centres from the Figma text boxes, measured against the render.
+    const cols = [98.5, 208.5, 320.5];
+    const rows = [532.5, 634.5, 737.5, 840.5];
+    Widget key(double cx, double cy, Widget child, VoidCallback onTap, {VoidCallback? onLongPress, String? label, Key? k}) {
+      return px.at(cx - 52, cy - 48, width: 104, height: 96, child: _Tap(
+        key: k, label: label, onTap: onTap, onLongPress: onLongPress, child: child,
+      ));
+    }
+
+    // Figma: Dotum 36 (digit cap-height 24px). The Nanum Gothic substitute's
+    // digits are ~8% taller, so 33.5 reproduces the designed glyph size.
+    final digitStyle = BType.keypad(33.5 * px.scale, color: AppColors.keypadInk);
+    return [
+      px.at(40, 470, width: 340, height: 420, child: SizedBox(key: TourKeys.homeKeypad)),
+      for (var r = 0; r < 3; r++)
+        for (var c = 0; c < 3; c++)
+          key(cols[c], rows[r], Text('${r * 3 + c + 1}', style: digitStyle),
+              () => _press(code, r * 3 + c + 1), label: '${r * 3 + c + 1}'),
+      key(cols[0], rows[3], Text('0', style: digitStyle), () => _press(code, 0), label: '0'),
+      // The capsule key (Frame 1, 51×50 at 184, 813) opens the category wheel.
+      key(209.5, 838, DesignIcon('key_down', scale: px.scale, width: 51, height: 50, tint: false),
+          _openPicker, label: 'Choose category', k: TourKeys.homeCategory),
+      // Backspace (Group 1, 28×19.64 at 306, 828); long-press clears.
+      key(320, 837.8, DesignIcon('key_backspace', scale: px.scale, width: 28, height: 19.636, tint: false),
+          () => _backspace(code), onLongPress: () => _backspace(code, all: true), label: 'Delete'),
+    ];
+  }
+
+  List<Widget> _picker(Px px, List<ContributionCategory> order, BasketState basket) {
+    final top = DesignWheel.top(_wheel);
+    return [
+      px.at(0, top, width: 420, height: DesignWheel.bottom(_wheel) - top, child: DesignWheel(
+        scale: px.scale,
+        geometry: _wheel,
+        items: [for (final c in order) c.name],
+        index: _focus.clamp(0, order.length - 1),
+        onChanged: (i) => setState(() => _focus = i),
+        onCardTap: _select,
+        onTrailingTap: _select,
+        cardKey: TourKeys.categoryCard,
+        trailing: (_) => DesignIcon('arrow_right_circle_blue', scale: px.scale, tint: false),
+      )),
+      px.text(0, 830, 'scroll for more', size: 15, weight: BType.light, color: Colors.black,
+          width: 420, align: TextAlign.center, fontFamily: BType.family),
+      // Scroll capsule (19×30, top 858) steps to the next category.
+      px.at(210 - 24, 858 - 9, width: 48, height: 48, child: _Tap(
+        label: 'Next category',
+        onTap: () => setState(() => _focus = (_focus + 1) % order.length),
+        child: DesignIcon('scroll_down', scale: px.scale, width: 19, height: 30, tint: false),
+      )),
+    ];
+  }
+}
+
+/// A transparent, generously sized hit area around a design glyph.
+class _Tap extends StatelessWidget {
+  const _Tap({super.key, required this.child, required this.onTap, this.onLongPress, this.label});
+  final Widget child;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+
+/// A quiet snackbar in the design's type: white, Elms Sans, blue text.
+SnackBar designSnack(BuildContext context, String message, {Color color = AppColors.blue}) {
+  final s = MediaQuery.of(context).size.width / 420;
+  return SnackBar(
+    behavior: SnackBarBehavior.floating,
+    elevation: 0,
+    backgroundColor: Colors.white,
+    // Floats above the bottom action row (Send / Give again at y 818–888),
+    // never over the button the message points to.
+    margin: EdgeInsets.fromLTRB(32 * s, 0, 32 * s, 104 * s),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(17 * s),
+      side: const BorderSide(color: AppColors.cardBorder),
+    ),
+    content: Text(message, textAlign: TextAlign.center, style: BType.elms(16 * s, color: color)),
+  );
 }

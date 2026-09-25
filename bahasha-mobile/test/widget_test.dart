@@ -58,4 +58,34 @@ void main() {
     expect(container.read(basketProvider).isSelected('offering'), isFalse);
     expect(container.read(basketProvider).isEmpty, isTrue);
   });
+
+  group('keypad', () {
+    test('types whole shillings, no leading zeros', () {
+      var a = 0;
+      a = KeypadInput.press(a, 0);
+      expect(a, 0);
+      for (final d in [3, 0, 0]) {
+        a = KeypadInput.press(a, d);
+      }
+      expect(a, 300);
+    });
+
+    test('caps at seven digits and backspaces', () {
+      var a = 0;
+      for (var i = 0; i < 9; i++) {
+        a = KeypadInput.press(a, 9);
+      }
+      expect(a, 9999999);
+      expect(KeypadInput.backspace(300), 30);
+      expect(KeypadInput.backspace(3), 0);
+    });
+  });
+
+  test('the category wheel matches the Figma: Church budget above Tithe, Offering below', () {
+    final order = wheelOrder(ContributionCategory.seed);
+    expect(order.first.code, 'tithe');
+    expect(order[1].code, 'offering');
+    expect(order.last.code, 'church_budget');
+    expect(order.length, ContributionCategory.seed.length);
+  });
 }

@@ -4,6 +4,7 @@ import 'data/local_database.dart';
 import 'data/registration_repository.dart';
 import 'data/contribution_repository.dart';
 import 'network/api_client.dart';
+import '../features/prayer/data/prayer_outbox.dart';
 
 /// Dependency wiring for the app. Single instances of the database, API client,
 /// and signer are shared through the tree; repositories compose them. Keeping
@@ -38,4 +39,11 @@ final contributionRepositoryProvider = Provider<ContributionRepository>((ref) {
 /// root gate between the registration flow and the home screen.
 final currentUserProvider = FutureProvider<LocalUser?>((ref) {
   return ref.watch(localDatabaseProvider).currentUser();
+});
+
+/// Prayer requests waiting to reach the prayer team's Google Sheet.
+final prayerOutboxProvider = Provider<PrayerOutbox>((ref) {
+  final outbox = PrayerOutbox();
+  ref.onDispose(outbox.dispose);
+  return outbox;
 });

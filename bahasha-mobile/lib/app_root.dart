@@ -1,27 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers.dart';
-import 'core/onboarding.dart';
 import 'core/theme/app_colors.dart';
 import 'features/contribution/presentation/home_screen.dart';
-import 'features/onboarding/onboarding_screen.dart';
 import 'features/registration/presentation/registration_screen.dart';
 
-/// The root gate. On the very first open it shows the one-time walkthrough; then
-/// the one-time registration; thereafter it goes straight to Home. Each decision
-/// is data-driven (a persisted flag / the local profile), never a runtime flag
-/// that can drift.
-class AppRoot extends ConsumerWidget {
+/// The root gate: the one-time registration, thereafter straight to Home. The
+/// decision is data-driven (the local profile), never a runtime flag that can
+/// drift. The first-run guided tour then runs on Home itself (see
+/// features/tour/), pointing at the real controls.
+class AppRoot extends ConsumerStatefulWidget {
   const AppRoot({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final seen = ref.watch(onboardingSeenProvider);
-    final user = ref.watch(currentUserProvider);
+  ConsumerState<AppRoot> createState() => _AppRootState();
+}
 
-    if (seen.valueOrNull == false) {
-      return OnboardingScreen(onDone: () => markOnboardingSeen(ref));
-    }
+class _AppRootState extends ConsumerState<AppRoot> {
+  @override
+  void initState() {
+    super.initState();
+    // Deliver any prayer requests still waiting on this phone, now and
+    // whenever the network returns.
+    ref.read(prayerOutboxProvider).start();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
 
     return user.when(
       loading: () => const _Splash(),
@@ -44,9 +50,9 @@ class _Splash extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: AppColors.panelGreen,
+      backgroundColor: Colors.white,
       body: Center(
-        child: CircularProgressIndicator(color: AppColors.indigo),
+        child: CircularProgressIndicator(color: AppColors.blue, strokeWidth: 1.5),
       ),
     );
   }

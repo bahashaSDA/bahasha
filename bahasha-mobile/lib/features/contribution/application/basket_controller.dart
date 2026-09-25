@@ -58,3 +58,38 @@ final basketProvider =
 final categoriesProvider = Provider<List<ContributionCategory>>(
   (ref) => ContributionCategory.seed,
 );
+
+/// The category the keypad is currently typing into (Home's centred title).
+/// Starts on Tithe, as in the Figma Home frame (621:5).
+final currentCategoryProvider = StateProvider<String>((ref) => 'tithe');
+
+/// Keypad input rules, kept pure so they are unit-tested: whole shillings only
+/// (M-Pesa settles integers), at most [maxDigits] digits, no leading zeros.
+class KeypadInput {
+  KeypadInput._();
+
+  static const int maxDigits = 7; // up to KES 9,999,999
+
+  /// The amount after pressing [digit] (0–9) on top of [current].
+  static int press(int current, int digit) {
+    final next = '${current == 0 ? '' : current}$digit';
+    if (next.length > maxDigits) return current;
+    return int.parse(next);
+  }
+
+  /// The amount after backspace.
+  static int backspace(int current) => current ~/ 10;
+}
+
+/// The order the category wheel scrolls through. The Figma wheel (621:54)
+/// shows Church budget above Tithe and Offering below, i.e. a circular list
+/// Tithe → Offering → … with Church budget closing the loop.
+List<ContributionCategory> wheelOrder(List<ContributionCategory> all) {
+  final budget = all.where((c) => c.code == 'church_budget');
+  return [...all.where((c) => c.code != 'church_budget'), ...budget];
+}
+
+/// Whether Home shows the category wheel (Category frame 621:54) in place of
+/// the keypad (Home frame 621:5). A provider, not widget state, so the guided
+/// tour can open the wheel to point at it.
+final homePickingProvider = StateProvider<bool>((ref) => false);

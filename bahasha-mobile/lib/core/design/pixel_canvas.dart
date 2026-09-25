@@ -24,6 +24,7 @@ class PixelCanvas extends StatelessWidget {
     this.background,
     this.scrollable = false,
     this.contentHeight,
+    this.fit = false,
   });
 
   /// Returns the positioned children, given a [Px] helper bound to the scale.
@@ -37,6 +38,12 @@ class PixelCanvas extends StatelessWidget {
   /// scrolling fruit grid). Defaults to the standard 912 frame.
   final double? contentHeight;
 
+  /// Contain the whole 420×912 frame in the viewport (scale by the tighter of
+  /// width/height, centre the rest). Used by the fixed, non-scrolling screens
+  /// (keypad, wheel, settings) so every element keeps its exact Figma
+  /// relationship on short and tall phones alike instead of being cut off.
+  final bool fit;
+
   static const double designWidth = 420;
   static const double designHeight = 912;
 
@@ -45,6 +52,23 @@ class PixelCanvas extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        if (fit) {
+          final scale = (width / designWidth) < (constraints.maxHeight / designHeight)
+              ? width / designWidth
+              : constraints.maxHeight / designHeight;
+          final px = Px(scale);
+          return Container(
+            color: background,
+            width: width,
+            height: constraints.maxHeight,
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: designWidth * scale,
+              height: designHeight * scale,
+              child: Stack(clipBehavior: Clip.none, children: builder(context, px)),
+            ),
+          );
+        }
         final scale = width / designWidth;
         final px = Px(scale);
         final canvasHeight = (contentHeight ?? designHeight) * scale;
@@ -113,16 +137,21 @@ class Px {
     Color color = const Color(0xFF231F4F),
     FontWeight weight = FontWeight.w300,
     double? width,
-    double height = 1.0,
+    double? height = 1.0,
     TextAlign align = TextAlign.left,
     int? maxLines,
     bool ellipsis = false,
     String fontFamily = 'BahashaSans',
   }) {
-    final isInter = fontFamily == 'Inter';
+    // Inter and Elms Sans are variable fonts: select the exact weight instance.
+    final isInter = fontFamily == 'Inter' || fontFamily == 'ElmsSans';
+    // Figma places Elms Sans glyphs ~0.08em higher in their text box than
+    // Flutter does (measured across the Home/Send/Settings frames); correct it
+    // so a Figma `top` lands the glyphs on the same pixel row.
+    final nudge = fontFamily == 'ElmsSans' && height == null ? size * 0.08 : 0.0;
     return Positioned(
       left: left * scale,
-      top: top * scale,
+      top: (top - nudge) * scale,
       width: width == null ? null : width * scale,
       child: Text(
         value,
