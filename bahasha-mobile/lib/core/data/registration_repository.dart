@@ -6,23 +6,22 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../crypto/payload_signer.dart';
-import '../network/api_client.dart';
 import 'local_database.dart';
 
-/// Owns the giver's registration: writes it locally first (so the app proceeds
-/// offline), then syncs to the backend, registering the device public key that
-/// anchors every future contribution signature.
+/// Owns the giver's registration. Fully offline: the profile is written on
+/// the phone, and the backend learns it through a CVendor hub over BLE — the
+/// hub relays [registrationBody] to POST /register (idempotent on clientUuid /
+/// deviceUuid) and hands back the server user id, which [markRegistered]
+/// stores. Until then `synced` is false and the next hub session registers
+/// (or re-registers, after an edit) before handing over any offering.
 class RegistrationRepository {
   RegistrationRepository({
     required LocalDatabase db,
-    required ApiClient api,
     required PayloadSigner signer,
   })  : _db = db,
-        _api = api,
         _signer = signer;
 
   final LocalDatabase _db;
-  final ApiClient _api;
   final PayloadSigner _signer;
   static const _uuid = Uuid();
 
@@ -52,17 +51,12 @@ class RegistrationRepository {
     return clientUuid;
   }
 
-  /// Push the local registration to the backend. Registers the device keypair's
-  /// public key. Idempotent: the backend reconciles on clientUuid/deviceUuid, so
-  /// a retry after a flaky connection creates no duplicates.
-  Future<void> sync() async {
+  /// The POST /register body a hub relays for this giver: the profile plus the
+  /// device public key that anchors every contribution signature.
+  Future<Map<String, dynamic>?> registrationBody() async {
     final user = await _db.currentUser();
-    if (user == null || user.synced) return;
-
-    final deviceUuid = await _signer.deviceUuid();
-    final publicKey = await _signer.publicKeySpkiBase64();
-
-    final serverUserId = await _api.register({
+    if (user == null) return null;
+    return {
       'clientUuid': user.clientUuid,
       'fullName': user.fullName,
       'phone': user.phone,
@@ -70,59 +64,42 @@ class RegistrationRepository {
       'homeChurch': user.churchId,
       'visibility': user.visibility,
       'device': {
-        'deviceUuid': deviceUuid,
-        'publicKey': publicKey,
+        'deviceUuid': await _signer.deviceUuid(),
+        'publicKey': await _signer.publicKeySpkiBase64(),
         'keyAlgorithm': 'ed25519',
         'platform': 'android',
       },
-    });
+    };
+  }
 
-    await (_db.update(_db.localUsers)
-          ..where((t) => t.clientUuid.equals(user.clientUuid)))
-        .write(
+  /// The hub relayed the registration and the backend accepted it.
+  Future<void> markRegistered(String serverUserId) async {
+    final user = await _db.currentUser();
+    if (user == null) return;
+    await (_db.update(_db.localUsers)..where((t) => t.clientUuid.equals(user.clientUuid))).write(
       LocalUsersCompanion(serverUserId: Value(serverUserId), synced: const Value(true)),
     );
   }
 
-  /// Toggle giving visibility. Applies locally immediately; syncs best-effort so
-  /// the change is not lost if offline (the outbox retries).
+  /// Toggle giving visibility. Applied on the phone at once; the backend is
+  /// updated through the next hub session (re-registration carries it).
   Future<void> setVisibility(String visibility) async {
     final user = await _db.currentUser();
     if (user == null) return;
-    await (_db.update(_db.localUsers)
-          ..where((t) => t.clientUuid.equals(user.clientUuid)))
-        .write(LocalUsersCompanion(visibility: Value(visibility)));
-    try {
-      await _api.setVisibility(user.clientUuid, visibility);
-    } on ApiException {
-      // Left for the next sync pass; the local value is authoritative meanwhile.
-    }
+    await (_db.update(_db.localUsers)..where((t) => t.clientUuid.equals(user.clientUuid)))
+        .write(LocalUsersCompanion(visibility: Value(visibility), synced: const Value(false)));
   }
 
-  /// Edit the giver's name/phone (Settings → Personal info). Applied locally
-  /// at once and marked unsynced; the existing idempotent /register call then
-  /// reconciles the same user on clientUuid, so the backend is updated with no
-  /// new endpoint.
-  ///
-  /// All-or-nothing: offerings are signed with the stored phone and the
-  /// backend only accepts a payload whose phone matches the user of record,
-  /// so a change the backend has not accepted must not linger locally. On any
-  /// failure (offline, or e.g. the phone belongs to another giver) the old
-  /// details are restored and the error is rethrown for the caller to show.
+  /// Edit the giver's name/phone (Settings → Personal info). Saved on the
+  /// phone and marked unsynced: the next hub session re-registers (the same
+  /// user, reconciled on clientUuid) BEFORE handing over any offering, so an
+  /// offering is never signed with a phone the backend has not accepted.
   Future<void> updateProfile({required String fullName, required String phone}) async {
     final user = await _db.currentUser();
     if (user == null) return;
-    Future<void> write(String name, String number, bool synced) =>
-        (_db.update(_db.localUsers)..where((t) => t.clientUuid.equals(user.clientUuid))).write(
-          LocalUsersCompanion(fullName: Value(name), phone: Value(number), synced: Value(synced)),
-        );
-    await write(fullName, phone, false);
-    try {
-      await sync();
-    } catch (_) {
-      await write(user.fullName, user.phone, user.synced);
-      rethrow;
-    }
+    await (_db.update(_db.localUsers)..where((t) => t.clientUuid.equals(user.clientUuid))).write(
+      LocalUsersCompanion(fullName: Value(fullName), phone: Value(phone), synced: const Value(false)),
+    );
   }
 
   /// Remove this giver's account from the phone: the profile and the local
@@ -139,5 +116,4 @@ class RegistrationRepository {
   /// Offerings signed on this phone that have not yet settled — deleting the
   /// account would discard them, so the UI warns first.
   Future<int> unsettledCount() async => (await _db.pendingContributions()).length;
-
 }

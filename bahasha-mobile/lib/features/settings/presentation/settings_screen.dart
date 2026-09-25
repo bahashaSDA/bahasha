@@ -10,7 +10,7 @@ import '../../../core/data/local_database.dart';
 import '../../../core/design/icon.dart';
 import '../../../core/design/pixel_canvas.dart';
 import '../../../core/design/type.dart';
-import '../../../core/network/api_client.dart';
+import '../../../core/data/contribution_repository.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../contribution/application/basket_controller.dart';
@@ -203,7 +203,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ref.invalidate(currentUserProvider);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(designSnack(context, 'Your details were updated'));
+        ..showSnackBar(designSnack(context, 'Saved. The collector updates them when you next give.'));
     }
   }
 
@@ -262,8 +262,7 @@ class _EditDetailsState extends ConsumerState<_EditDetails> {
     super.dispose();
   }
 
-  static bool _validPhone(String v) =>
-      RegExp(r'^(0|254|\+254)?[17][0-9]{8}$').hasMatch(v.replaceAll(RegExp(r'[\s-]'), ''));
+  static bool _validPhone(String v) => ContributionRepository.normalizeMsisdn(v) != null;
 
   Future<void> _save() async {
     final name = _name.text.trim();
@@ -275,20 +274,15 @@ class _EditDetailsState extends ConsumerState<_EditDetails> {
       _error = null;
     });
     try {
+      // Saved on the phone; the church's collector updates the backend the
+      // next time you give (before any offering is handed over).
       await ref.read(registrationRepositoryProvider).updateProfile(fullName: name, phone: phone);
       if (mounted) Navigator.of(context).pop(true);
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _error = e.message;
-        });
-      }
     } catch (_) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = 'Could not update your details. Please check your connection and try again.';
+          _error = 'Could not save your details. Please try again.';
         });
       }
     }

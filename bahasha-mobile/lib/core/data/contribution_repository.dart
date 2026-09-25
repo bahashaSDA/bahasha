@@ -8,13 +8,16 @@ import 'package:uuid/uuid.dart';
 import '../crypto/payload_signer.dart';
 import 'local_database.dart';
 
-/// Turns a giving basket into a durable, signed contribution in the local
-/// outbox. This is the on-device half of the BLE protocol: it mints the
-/// idempotency key, pulls the next replay counter, builds the exact canonical
-/// bytes the backend verifies, and signs them — all before anything is
-/// transmitted. If the app dies here, the contribution survives in SQLite and
-/// the outbox resends it later. Nothing is ever charged twice, and nothing is
-/// lost.
+/// Turns a giving basket into a durable contribution in the local outbox, and
+/// — at hand-over time, over BLE — into the signed envelope the backend's
+/// /ingest verifies (documentation/protocol/ble-protocol.md §4).
+///
+/// Why sign at hand-over, not at tap: the backend only accepts a payload whose
+/// device timestamp is fresh (PAYLOAD_MAX_AGE_SECONDS, 15 min) and whose nonce
+/// the hub just issued. An offering saved in the pew with no hub in range can
+/// therefore wait on the phone for days, and is signed the moment a hub takes
+/// it. Re-signing a retried offering is safe: the idempotency key never
+/// changes, and the backend de-duplicates on it, so nothing is charged twice.
 class ContributionRepository {
   ContributionRepository({required LocalDatabase db, required PayloadSigner signer})
       : _db = db,
@@ -24,9 +27,9 @@ class ContributionRepository {
   final PayloadSigner _signer;
   static const _uuid = Uuid();
 
-  /// Create a signed contribution from a basket of category→amount entries.
-  /// Returns the contribution id (also the idempotency key). Fully offline.
-  Future<String> createSigned({
+  /// Save a basket as a queued contribution. Returns its id (also the
+  /// idempotency key). Fully offline; nothing is signed yet.
+  Future<String> createQueued({
     required Map<String, int> allocations,
     required LocalUser user,
   }) async {
@@ -35,24 +38,56 @@ class ContributionRepository {
     if (total <= 0) {
       throw ArgumentError('cannot create a contribution with no amount');
     }
+    final allocationsJson = jsonEncode(
+      allocations.entries
+          .where((e) => e.value > 0)
+          .map((e) => {'categoryCode': e.key, 'amount': e.value})
+          .toList(),
+    );
+    await _db.into(_db.contributions).insert(
+          ContributionsCompanion(
+            id: Value(id),
+            churchId: Value(user.churchId),
+            totalAmount: Value(total),
+            allocationsJson: Value(allocationsJson),
+            anonymous: Value(user.visibility == 'secret'),
+            status: const Value('queued'),
+            counter: const Value(0), // assigned when signed for hand-over
+          ),
+        );
+    return id;
+  }
+
+  /// Offerings waiting to be handed to a hub, oldest first.
+  Future<List<Contribution>> awaitingHandover() {
+    return (_db.select(_db.contributions)
+          ..where((t) => t.status.isIn(['queued', 'transmitting']))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+  }
+
+  /// Sign [row] for hand-over with the hub's [nonce]: a fresh replay counter
+  /// and timestamp, over the exact canonical bytes the backend verifies.
+  /// Returns the /ingest payload the hub uploads verbatim. Requires the giver
+  /// to be registered with the backend (a server user id).
+  Future<Map<String, dynamic>> envelopeFor(Contribution row, LocalUser user, String nonce) async {
+    final userId = user.serverUserId;
+    if (userId == null) throw StateError('giver is not registered with the backend yet');
+    final msisdn = normalizeMsisdn(user.phone);
+    if (msisdn == null) throw StateError('phone number is not a valid Kenyan mobile number');
 
     final counter = await _db.nextCounter();
-    final nonce = _uuid.v4();
-    final anonymous = user.visibility == 'secret';
-    // Single source of truth for the device id — same value the backend stored
-    // at registration, so signature verification resolves the right key.
     final deviceUuid = await _signer.deviceUuid();
     final timestamp = DateTime.now().toUtc().toIso8601String();
-
-    // Build the canonical bytes IDENTICAL to the backend verifier, then sign.
+    final anonymous = user.visibility == 'secret';
     final message = PayloadSigner.canonicalBytes(
-      idempotencyKey: id,
+      idempotencyKey: row.id,
       deviceUuid: deviceUuid,
-      userId: user.serverUserId ?? user.clientUuid,
-      // The churchId column now holds the giver's free-text HOME church.
+      userId: userId,
+      // The churchId column holds the giver's free-text HOME church.
       homeChurch: user.churchId,
-      msisdn: user.phone,
-      totalAmount: total,
+      msisdn: msisdn,
+      totalAmount: row.totalAmount,
       counter: counter,
       nonce: nonce,
       deviceTimestamp: timestamp,
@@ -60,28 +95,37 @@ class ContributionRepository {
     );
     final signature = await _signer.sign(message);
 
-    final allocationsJson = jsonEncode(
-      allocations.entries
-          .where((e) => e.value > 0)
-          .map((e) => {'categoryCode': e.key, 'amount': e.value})
-          .toList(),
+    await (_db.update(_db.contributions)..where((t) => t.id.equals(row.id))).write(
+      ContributionsCompanion(
+        counter: Value(counter),
+        nonce: Value(nonce),
+        signature: Value(signature),
+        anonymous: Value(anonymous),
+        status: const Value('transmitting'),
+        retryCount: Value(row.retryCount + 1),
+        updatedAt: Value(DateTime.now()),
+      ),
     );
 
-    await _db.into(_db.contributions).insert(
-          ContributionsCompanion(
-            id: Value(id),
-            churchId: Value(user.churchId),
-            totalAmount: Value(total),
-            allocationsJson: Value(allocationsJson),
-            anonymous: Value(anonymous),
-            status: const Value('queued'),
-            counter: Value(counter),
-            nonce: Value(nonce),
-            signature: Value(signature),
-          ),
-        );
-
-    return id;
+    return {
+      'idempotencyKey': row.id,
+      'deviceUuid': deviceUuid,
+      'userId': userId,
+      'homeChurch': user.churchId,
+      'msisdn': msisdn,
+      'totalAmount': row.totalAmount,
+      'allocations': jsonDecode(row.allocationsJson),
+      'counter': counter,
+      'nonce': nonce,
+      'deviceTimestamp': timestamp,
+      'anonymous': anonymous,
+      // The spec's encryption-to-church-key layer is not implemented yet; the
+      // backend stores this field for forensics only (the SIGNATURE is what
+      // proves authenticity), so it carries the signed canonical bytes.
+      'ciphertext': base64Encode(message),
+      'signature': signature,
+      'algorithm': 'ed25519',
+    };
   }
 
   /// Mark an outbox item's transmission state as it moves through BLE → backend.
@@ -95,4 +139,23 @@ class ContributionRepository {
     );
   }
 
+  /// Kenyan MSISDN → E.164, exactly as the backend normalises it at
+  /// registration (backend/src/lib/phone.ts) — /ingest compares the signed
+  /// number to the stored one byte for byte.
+  static String? normalizeMsisdn(String raw) {
+    var s = raw.replaceAll(RegExp(r'[\s\-()]'), '');
+    if (s.isEmpty) return null;
+    if (s.startsWith('+')) {
+      // already prefixed
+    } else if (s.startsWith('254')) {
+      s = '+$s';
+    } else if (s.startsWith('0')) {
+      s = '+254${s.substring(1)}';
+    } else if (RegExp(r'^[17][0-9]{8}$').hasMatch(s)) {
+      s = '+254$s';
+    } else {
+      return null;
+    }
+    return RegExp(r'^\+254[17][0-9]{8}$').hasMatch(s) ? s : null;
+  }
 }

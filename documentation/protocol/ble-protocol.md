@@ -110,18 +110,44 @@ the backend for verification and forensic retention.
 > encryption — is what proves authenticity, because the hub necessarily sees the
 > plaintext and must not be able to tamper with it undetected.
 
-## 5. Transport (BLE)
+## 5. Transport (BLE): the phone is fully offline
 
-- The hub advertises a Bahasha GATT service with a well-known UUID.
-- The giver's app scans, connects, and performs a challenge-response handshake:
-  the hub issues a fresh `nonce`; the app includes it in the signed payload. A
-  nonce is single-use (enforced by a unique index), so a captured packet cannot
-  be replayed even against a hub that reissued the same challenge.
-- The payload is written in chunks over a characteristic (BLE MTU is small;
-  payloads are a few hundred bytes and fragment cleanly).
-- On any BLE failure the app retries with backoff and keeps the contribution in
-  its local **outbox** until a hub acknowledges receipt. Nothing is lost if the
-  member walks out of range mid-transfer.
+Bahasha makes **no internet calls** (its release build has no INTERNET
+permission). Everything the backend or the prayer sheet needs travels
+through the hub, which has the connection. Wire format:
+`bahasha-mobile/lib/core/ble/hub_protocol.dart` and
+`cvendor-mobile/lib/core/hub_protocol.dart`, which MUST stay identical.
+
+One session per encounter (`GivingRelay` on the phone, `BleReceiver` +
+`HubMessageHandler` on the hub):
+
+1. **Connect.** The phone scans for the service UUID, connects, requests a
+   247-byte MTU and subscribes to the ack characteristic *before* writing.
+2. **Challenge (READ).** The hub answers
+   `{"v":1,"nonce":"<32 hex>","church":"<paired church name>"}`, fresh per
+   session. Long reads are served from the requested offset.
+3. **Messages (WRITE, framed `[seq:2][total:2][data]`, chunk = MTU − 3).**
+   Each message is answered by one ack notification:
+
+   | Message | Hub action | Ack |
+   |---|---|---|
+   | `{"type":"register","body":{…POST /register body…}}`, sent first, only if the backend doesn't know this giver yet or their details changed | relays to `POST /register` | `0x01` + 16-byte server user id · `0x04` hub offline · `0x05` refused |
+   | offering: the exact `/ingest` payload (§4), **signed now** with nonce `<challenge>-<n>` | queues it and uploads at once | `0x01` · `0xFF` if the nonce isn't from this session |
+   | `{"type":"prayer","requestId":…,"prayer":…}` (anonymous) | forwards to the prayer sheet | `0x01` |
+
+- **Why sign at hand-over:** `/ingest` rejects a payload older than
+  `PAYLOAD_MAX_AGE_SECONDS` (15 min), and `userId` must be the *server* id
+  issued at registration. So an offering saved with no hub in range waits
+  unsigned on the phone and is signed the moment a hub takes it. A retry is
+  re-signed with a new counter and keeps its idempotency key, so it is never
+  charged twice. If the phone resends an offering, the hub keeps the fresher
+  copy while it hasn't uploaded it yet.
+- **The hub must be online** to relay a first registration, and should upload
+  within 15 minutes of receiving an offering. If it is offline, the phone
+  keeps the offering until the next session.
+- **Not yet implemented:** the encryption layer of §4.2. `ciphertext`
+  currently carries the signed canonical bytes (base64). The backend keeps
+  that field for forensics only; the signature is what's verified.
 
 ## 6. Backend verification (the gate)
 

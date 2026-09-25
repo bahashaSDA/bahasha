@@ -3,11 +3,10 @@ import 'crypto/payload_signer.dart';
 import 'data/local_database.dart';
 import 'data/registration_repository.dart';
 import 'data/contribution_repository.dart';
-import 'network/api_client.dart';
 import '../features/prayer/data/prayer_outbox.dart';
 
-/// Dependency wiring for the app. Single instances of the database, API client,
-/// and signer are shared through the tree; repositories compose them. Keeping
+/// Dependency wiring for the app. Single instances of the database and
+/// signer are shared through the tree; repositories compose them. Keeping
 /// this in one place makes the object graph explicit and swappable in tests.
 
 final localDatabaseProvider = Provider<LocalDatabase>((ref) {
@@ -16,14 +15,11 @@ final localDatabaseProvider = Provider<LocalDatabase>((ref) {
   return db;
 });
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
-
 final payloadSignerProvider = Provider<PayloadSigner>((ref) => PayloadSigner());
 
 final registrationRepositoryProvider = Provider<RegistrationRepository>((ref) {
   return RegistrationRepository(
     db: ref.watch(localDatabaseProvider),
-    api: ref.watch(apiClientProvider),
     signer: ref.watch(payloadSignerProvider),
   );
 });
@@ -41,9 +37,5 @@ final currentUserProvider = FutureProvider<LocalUser?>((ref) {
   return ref.watch(localDatabaseProvider).currentUser();
 });
 
-/// Prayer requests waiting to reach the prayer team's Google Sheet.
-final prayerOutboxProvider = Provider<PrayerOutbox>((ref) {
-  final outbox = PrayerOutbox();
-  ref.onDispose(outbox.dispose);
-  return outbox;
-});
+/// Anonymous prayers waiting on the phone to be handed to a hub over BLE.
+final prayerOutboxProvider = Provider<PrayerOutbox>((ref) => PrayerOutbox());

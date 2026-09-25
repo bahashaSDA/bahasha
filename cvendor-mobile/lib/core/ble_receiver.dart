@@ -2,14 +2,14 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
-import 'hub_database.dart';
+import 'hub_protocol.dart';
 
-/// The hub's BLE peripheral: it advertises the Bahasha GATT service and accepts
-/// contribution payloads written by nearby Bahasha (giver) devices, reassembles
-/// the chunked frames, and enqueues each complete payload for upload.
+/// The hub's BLE peripheral: it advertises the Bahasha GATT service, answers
+/// each phone's challenge read, reassembles the chunked messages phones write
+/// (registration, offerings, prayers) and hands each to [HubMessageHandler],
+/// notifying the phone of the result.
 ///
 /// Protocol (mirrors documentation/protocol/ble-protocol.md and the Bahasha
 /// send side). The UUIDs MUST match the giver app exactly.
@@ -18,9 +18,12 @@ import 'hub_database.dart';
 /// be exercised on an emulator or in unit tests. The reassembly logic is a pure
 /// function ([reassemble]) so that part is tested without a radio.
 class BleReceiver {
-  BleReceiver({required HubDatabase db}) : _db = db;
+  BleReceiver({required HubMessageHandler handler, String? churchName})
+      : _handler = handler,
+        _churchName = churchName;
 
-  final HubDatabase _db;
+  final HubMessageHandler _handler;
+  final String? _churchName;
   final PeripheralManager _manager = PeripheralManager();
 
   // Must equal BleProtocol in the Bahasha app.
@@ -30,6 +33,11 @@ class BleReceiver {
   static final UUID _ack = UUID.fromString('b1a5a003-0000-4000-8000-00000000ba5a');
 
   StreamSubscription<GATTCharacteristicWriteRequestedEventArgs>? _writeSub;
+  StreamSubscription<GATTCharacteristicReadRequestedEventArgs>? _readSub;
+
+  /// The challenge issued to each connected phone for its current session.
+  final Map<String, Uint8List> _challenges = {};
+  final Map<String, String> _nonces = {};
   GATTCharacteristic? _ackCharacteristic;
 
   /// Per-connection chunk reassembly buffers, keyed by central id.
@@ -77,6 +85,7 @@ class BleReceiver {
     await _manager.addService(service);
 
     _writeSub = _manager.characteristicWriteRequested.listen(_onWrite);
+    _readSub = _manager.characteristicReadRequested.listen(_onRead);
 
     await _manager.startAdvertising(
       Advertisement(name: 'Bahasha Hub', serviceUUIDs: [_service]),
@@ -86,9 +95,32 @@ class BleReceiver {
 
   Future<void> stop() async {
     await _writeSub?.cancel();
+    await _readSub?.cancel();
     await _manager.stopAdvertising();
     await _manager.removeAllServices();
     _statusController.add('Stopped');
+  }
+
+  /// A phone starts each session by reading the challenge: a fresh nonce
+  /// (and this hub's church name). Long values are read in pieces, so answer
+  /// from the requested offset; a read at offset 0 starts a new session.
+  Future<void> _onRead(GATTCharacteristicReadRequestedEventArgs args) async {
+    if (args.characteristic.uuid != _challenge) {
+      await _manager.respondReadRequestWithValue(args.request, value: Uint8List(0));
+      return;
+    }
+    final centralId = args.central.uuid.toString();
+    final offset = args.request.offset;
+    if (offset == 0 || !_challenges.containsKey(centralId)) {
+      final nonce = HubProtocol.newNonce();
+      _nonces[centralId] = nonce;
+      _challenges[centralId] = HubProtocol.challenge(nonce, _churchName);
+    }
+    final bytes = _challenges[centralId]!;
+    await _manager.respondReadRequestWithValue(
+      args.request,
+      value: offset >= bytes.length ? Uint8List(0) : bytes.sublist(offset),
+    );
   }
 
   Future<void> _onWrite(GATTCharacteristicWriteRequestedEventArgs args) async {
@@ -104,35 +136,16 @@ class BleReceiver {
     if (complete == null) return; // more chunks to come
 
     _assemblies.remove(centralId);
-    await _handleComplete(complete, args.central);
+    final ack = await _handler.handle(complete, issuedNonce: _nonces[centralId]);
+    if (ack.first == HubProtocol.ackAccepted) _statusController.add('Received from a giver');
+    await _notify(args.central, ack);
   }
 
-  Future<void> _handleComplete(Uint8List bytes, Central central) async {
-    try {
-      final map = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-      final key = map['idempotencyKey'] as String?;
-      if (key == null) {
-        await _notifyAck(central, 0xFF);
-        return;
-      }
-      await _db.enqueue(key, utf8.decode(bytes), map['deviceUuid'] as String?);
-      await _db.log('Received contribution ${key.substring(0, 8)}');
-      _statusController.add('Received a contribution');
-      await _notifyAck(central, 0x01); // accepted-for-relay
-    } catch (_) {
-      await _notifyAck(central, 0xFF); // malformed
-    }
-  }
-
-  Future<void> _notifyAck(Central central, int statusByte) async {
+  Future<void> _notify(Central central, Uint8List value) async {
     final ack = _ackCharacteristic;
     if (ack == null) return;
     try {
-      await _manager.notifyCharacteristic(
-        central,
-        ack,
-        value: Uint8List.fromList([statusByte]),
-      );
+      await _manager.notifyCharacteristic(central, ack, value: value);
     } catch (_) {
       // Central may have disconnected; the giver's outbox will retry.
     }
@@ -151,6 +164,7 @@ class BleReceiver {
 
   void dispose() {
     _writeSub?.cancel();
+    _readSub?.cancel();
     _statusController.close();
   }
 }

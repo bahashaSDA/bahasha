@@ -59,6 +59,19 @@ class HubDatabase extends _$HubDatabase {
     );
   }
 
+  /// Like [enqueue], but when a phone re-sends an offering this hub has not
+  /// uploaded yet (e.g. its ack was lost), keep the NEWER copy: the phone
+  /// re-signs on every attempt, and the backend only accepts a fresh
+  /// signature. An already-uploaded offering is left alone.
+  Future<void> enqueueOrRefresh(String idempotencyKey, String payloadJson, String? deviceUuid) async {
+    final existing = await (select(receivedPayloads)..where((t) => t.idempotencyKey.equals(idempotencyKey)))
+        .getSingleOrNull();
+    if (existing == null) return enqueue(idempotencyKey, payloadJson, deviceUuid);
+    if (existing.status == 'uploaded' || existing.status == 'uploading') return;
+    await (update(receivedPayloads)..where((t) => t.idempotencyKey.equals(idempotencyKey)))
+        .write(ReceivedPayloadsCompanion(payloadJson: Value(payloadJson), status: const Value('received')));
+  }
+
   Future<List<ReceivedPayload>> pending() {
     return (select(receivedPayloads)
           ..where((t) => t.status.isIn(['received', 'failed']))

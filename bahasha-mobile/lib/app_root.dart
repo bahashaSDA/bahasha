@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers.dart';
 import 'core/theme/app_colors.dart';
+import 'features/contribution/application/giving_relay.dart';
 import 'features/contribution/presentation/home_screen.dart';
 import 'features/registration/presentation/registration_screen.dart';
 
@@ -20,9 +21,13 @@ class _AppRootState extends ConsumerState<AppRoot> {
   @override
   void initState() {
     super.initState();
-    // Deliver any prayer requests still waiting on this phone, now and
-    // whenever the network returns.
-    ref.read(prayerOutboxProvider).start();
+    // Anything still waiting on the phone (an offering, a prayer, a
+    // registration) is handed to a nearby collector over Bluetooth. Bahasha
+    // never uses the internet.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final relay = ref.read(givingRelayProvider);
+      if (await relay.hasWork()) await relay.drain();
+    });
   }
 
   @override

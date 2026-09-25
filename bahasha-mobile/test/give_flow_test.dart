@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -12,7 +11,9 @@ import 'package:bahasha/core/data/local_database.dart';
 import 'package:bahasha/core/providers.dart';
 import 'package:bahasha/features/contribution/presentation/home_screen.dart';
 import 'package:bahasha/features/contribution/presentation/thank_you_screen.dart';
+import 'package:bahasha/features/contribution/application/giving_relay.dart';
 import 'package:bahasha/features/prayer/data/prayer_outbox.dart';
+import 'fake_hub.dart';
 import 'package:bahasha/features/prayer/presentation/prayer_screen.dart';
 import 'package:bahasha/features/tour/tour_controller.dart';
 import 'package:bahasha/features/tour/tour_overlay.dart';
@@ -20,22 +21,6 @@ import 'package:bahasha/features/tour/tour_overlay.dart';
 /// End-to-end giving journey on the real screens, against an in-memory
 /// database and the real signer: keypad → Send → (optional) prayer → Send →
 /// offering signed into the outbox → prayer queued and delivered.
-
-class _Script implements HttpClientAdapter {
-  final posted = <Map<String, dynamic>>[];
-  @override
-  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
-    if (o.method == 'POST') {
-      final bytes = await body!.fold<List<int>>([], (a, b) => a..addAll(b));
-      posted.add(jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>);
-      return ResponseBody.fromString('', 302, headers: {'location': ['https://echo']});
-    }
-    return ResponseBody.fromString('{"ok":true}', 200);
-  }
-
-  @override
-  void close({bool force = false}) {}
-}
 
 class _Vendor extends VendorPresenceController {
   @override
@@ -67,7 +52,7 @@ void main() {
   });
 
   late LocalDatabase db;
-  late _Script script;
+  late FakeHub hub;
 
   Future<ProviderContainer> app(WidgetTester t, {bool tourDone = true}) async {
     t.view.physicalSize = const Size(420, 912);
@@ -83,12 +68,10 @@ void main() {
           membershipStatus: 'member',
           serverUserId: const Value('u-1'),
         )));
-    script = _Script();
-    final dio = Dio(BaseOptions(followRedirects: false, validateStatus: (s) => s != null && s < 500))
-      ..httpClientAdapter = script;
+    hub = FakeHub();
     final container = ProviderContainer(overrides: [
       localDatabaseProvider.overrideWithValue(db),
-      prayerOutboxProvider.overrideWithValue(PrayerOutbox(dio: dio, endpoint: 'https://script.test/exec')..retryDelay = Duration.zero),
+      hubConnectorProvider.overrideWithValue(hub),
       vendorPresenceProvider.overrideWith(_Vendor.new),
     ]);
     addTearDown(container.dispose);
@@ -128,7 +111,7 @@ void main() {
     }
   }
 
-  testWidgets('give with a prayer: offering signed, prayer delivered anonymously', (t) async {
+  testWidgets('give with a prayer: registered, offering and anonymous prayer handed over Bluetooth', (t) async {
     await app(t);
     await type(t, '300');
     expect(find.text('300'), findsOneWidget);
@@ -154,19 +137,19 @@ void main() {
     final rows = await t.runAsync(() => db.history());
     expect(rows, hasLength(1));
     expect(rows!.single.totalAmount, 300);
-    expect(rows.single.status, 'queued');
-    for (var i = 0; i < 30 && script.posted.isEmpty; i++) {
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    }
-    expect(script.posted, hasLength(1));
-    expect(script.posted.single['prayer'], 'Healing for my mother');
+    // Handed to the collector over Bluetooth (registering on the way).
+    expect(rows.single.status, 'sent');
+    expect(find.textContaining('Handed to TUK SDA Church'), findsOneWidget);
+    expect(hub.registrations, hasLength(1));
+    expect(hub.offerings.single['totalAmount'], 300);
+    expect(hub.prayers.single['prayer'], 'Healing for my mother');
     // Anonymous: nothing ties the prayer to the giver or the offering.
-    expect(script.posted.single.keys.toSet(), {'requestId', 'prayer', 'cycle'});
-    expect(jsonEncode(script.posted.single).contains(rows.single.id.substring(0, 8)), isFalse);
+    expect(hub.prayers.single.keys.toSet(), {'type', 'requestId', 'prayer'});
+    expect(jsonEncode(hub.prayers.single).contains(rows.single.id.substring(0, 8)), isFalse);
     await t.pump(const Duration(seconds: 5)); // let snackbars expire
   });
 
-  testWidgets('skip the prayer: offering still sends, no prayer saved', (t) async {
+  testWidgets('skip the prayer: offering still handed over, no prayer saved', (t) async {
     await app(t);
     await type(t, '50');
     await t.tap(find.bySemanticsLabel('Review and send'));
@@ -182,9 +165,9 @@ void main() {
     await until(t, find.byType(ThankYouScreen));
     expect(find.byType(ThankYouScreen), findsOneWidget);
     expect(await t.runAsync(() => db.history()), hasLength(1));
-    expect(script.posted, isEmpty);
-    final queued = await t.runAsync(() => PrayerOutbox(endpoint: '').pending());
-    expect(queued, isEmpty);
+    expect(hub.offerings, hasLength(1));
+    expect(hub.prayers, isEmpty);
+    expect(await t.runAsync(() => PrayerOutbox().pending()), isEmpty);
     await t.pump(const Duration(seconds: 5));
   });
 

@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/data/contribution_repository.dart';
 import '../../../core/providers.dart';
 
 /// First-time welcome + registration — one screen, no scrolling. We collect only
@@ -95,7 +95,8 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
             membershipStatus: 'member', // auto-reclassified per giving vs hub church
             visibility: 'open', // give openly by default
           );
-      unawaited(_trySync());
+      // No network call: the backend learns this giver through the church's
+      // CVendor hub over Bluetooth, the first time they give.
       ref.invalidate(currentUserProvider);
       widget.onComplete();
     } catch (e) {
@@ -106,13 +107,6 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
         setState(() => _submitting = false);
       }
     }
-  }
-
-  Future<void> _trySync() async {
-    try {
-      await ref.read(registrationRepositoryProvider).sync();
-      ref.invalidate(currentUserProvider);
-    } catch (_) {}
   }
 
   @override
@@ -231,9 +225,8 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
 
   String? _validatePhone(String? v) {
     if (v == null || v.trim().isEmpty) return 'Please enter your phone number';
-    final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
-    final ok = RegExp(r'^(0|254|\+254)?[17][0-9]{8}$').hasMatch(v.replaceAll(' ', '')) || digits.length >= 9;
-    return ok ? null : 'Enter a valid Kenyan mobile number';
+    // Same rule the backend applies (it must accept this number later).
+    return ContributionRepository.normalizeMsisdn(v) != null ? null : 'Enter a valid Kenyan mobile number';
   }
 
   Widget _label(String text) => Padding(

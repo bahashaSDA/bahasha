@@ -12,11 +12,11 @@ stores only those fields and ignores anything else, so an older app version
 that still sends a name can't put one in the Sheet.
 
 ```
-Bahasha app ──POST──▶ Apps Script web app ──▶ Google Sheet "Active" tab
- (queued on the phone      (Code.gs, runs as          │  shared privately with
-  until delivered)          the sheet owner)          │  the prayer team
-                                                       ▼
-                         daily 00:15 EAT trigger ──▶ "Archive" tab (or delete)
+Bahasha app ──Bluetooth──▶ CVendor hub ──POST──▶ Apps Script web app ──▶ Sheet "Active" tab
+ (fully offline; prayer      (has internet;         (Code.gs, runs as        │  opened from CVendor's
+  queued until a hub          holds it until         the sheet owner)        │  "Prayer requests" card
+  takes it)                   the sheet confirms)                            ▼
+                                             daily 00:15 EAT trigger ──▶ "Archive" tab (or delete)
 ```
 
 This needs no Bahasha backend or database change, and no Google credential
@@ -60,10 +60,10 @@ returns stored prayers.
      accepts prayers but never returns them.
 
    Copy the **Web app URL** (`https://script.google.com/macros/s/…/exec`).
-6. Put that URL in the app. The church's URL is already set as the default
-   (`PrayerOutbox.defaultEndpoint` in
-   `bahasha-mobile/lib/features/prayer/data/prayer_outbox.dart`), so every
-   build, including the GitHub APK workflow, uses it. To point a build at a
+6. Put that URL in CVendor (the hub forwards the prayers; the Bahasha phone
+   never goes online). The church's URL is already the default
+   (`PrayerRelay.defaultEndpoint` in `cvendor-mobile/lib/core/prayer_relay.dart`),
+   so every build, including the GitHub APK workflow, uses it. To point a build at a
    different sheet, add:
 
    ```
@@ -78,9 +78,9 @@ returns stored prayers.
    publish it to the web or create a "link sharing" link.
 
 Google's reply page for web apps is sometimes unreachable for a moment
-(tested against the live endpoint: about one read in three). The app re-sends
+(tested against the live endpoint: about one read in three). CVendor re-sends
 up to 4 times. This is safe because the sheet de-duplicates on Request ID.
-Anything still undelivered stays queued on the phone and is retried when the
+Anything still undelivered stays on the hub and is retried when the
 network returns.
 
 ## Checking it works

@@ -7,6 +7,8 @@ import '../core/hub_database.dart';
 import '../core/ingest_client.dart';
 import '../core/upload_service.dart';
 import '../core/ble_receiver.dart';
+import '../core/hub_protocol.dart';
+import '../core/prayer_relay.dart';
 import '../theme.dart';
 import 'prayer_card.dart';
 
@@ -24,6 +26,7 @@ class HubDashboardScreen extends ConsumerStatefulWidget {
 class _HubDashboardScreenState extends ConsumerState<HubDashboardScreen> {
   BleReceiver? _receiver;
   UploadService? _upload;
+  PrayerRelay? _prayers;
   String _bleStatus = 'Starting…';
   StreamSubscription<String>? _statusSub;
 
@@ -45,12 +48,40 @@ class _HubDashboardScreenState extends ConsumerState<HubDashboardScreen> {
     final session = ref.read(hubSessionProvider);
     final apiKey = await session.apiKey;
     if (apiKey == null) return;
+    final churchName = await session.churchName;
+    final client = IngestClient(apiKey: apiKey);
 
-    // Start the upload pump.
-    _upload = UploadService(db: db, client: IngestClient(apiKey: apiKey))..start();
+    // Start the upload pump and the prayer relay.
+    final upload = UploadService(db: db, client: client)..start();
+    _upload = upload;
+    final prayers = PrayerRelay()..start();
+    _prayers = prayers;
+
+    // Bahasha phones are fully offline: this hub relays their registration,
+    // offerings and prayers.
+    final handler = HubMessageHandler(
+      enqueueOffering: (key, json, device) async {
+        await db.enqueueOrRefresh(key, json, device);
+        // Upload straight away: the backend only accepts an offering whose
+        // signature is fresh (15 minutes).
+        unawaited(upload.drain());
+      },
+      register: (body) async {
+        try {
+          return (RegisterOutcome.registered, await client.register(body));
+        } on RegisterRefused catch (e) {
+          await db.log('Giver registration refused: ${e.message}', level: 'warn');
+          return (RegisterOutcome.refused, null);
+        } catch (_) {
+          return (RegisterOutcome.offline, null);
+        }
+      },
+      enqueuePrayer: prayers.enqueue,
+      log: (m) => db.log(m),
+    );
 
     // Start the BLE peripheral.
-    final receiver = BleReceiver(db: db);
+    final receiver = BleReceiver(handler: handler, churchName: churchName);
     _receiver = receiver;
     _statusSub = receiver.status.listen((s) {
       if (mounted) setState(() => _bleStatus = s);
@@ -64,6 +95,7 @@ class _HubDashboardScreenState extends ConsumerState<HubDashboardScreen> {
     _receiver?.stop();
     _receiver?.dispose();
     _upload?.dispose();
+    _prayers?.dispose();
     super.dispose();
   }
 

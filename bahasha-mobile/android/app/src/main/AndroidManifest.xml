@@ -16,7 +16,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- NO INTERNET permission: Bahasha is fully offline. Everything reaches
+         the church through a CVendor hub over Bluetooth Low Energy (the hub
+         has the connection). Debug/profile builds get INTERNET from their own
+         manifests for Flutter tooling only. -->
 
     <!-- BLE is required hardware for this app to function. -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />

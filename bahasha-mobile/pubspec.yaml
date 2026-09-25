@@ -33,10 +33,6 @@ dependencies:
   cryptography: ^2.7.0            # Ed25519 signing of contribution payloads
   uuid: ^4.5.1
 
-  # --- Connectivity / sync ---------------------------------------------------
-  dio: ^5.7.0                     # API client with retries
-  connectivity_plus: ^6.1.0       # trigger sync when the network returns
-
   # --- Bluetooth Low Energy --------------------------------------------------
   flutter_reactive_ble: ^5.4.0
   permission_handler: ^11.3.1

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/ble/vendor_presence.dart';
@@ -10,6 +11,7 @@ import '../../prayer/data/prayer_outbox.dart';
 import '../../prayer/presentation/prayer_screen.dart';
 import '../../tour/tour_controller.dart';
 import '../application/basket_controller.dart';
+import '../application/giving_relay.dart';
 import '../domain/contribution_category.dart';
 import 'home_screen.dart' show designSnack;
 import 'thank_you_screen.dart';
@@ -28,10 +30,11 @@ import 'widgets/design_wheel.dart';
 ///
 /// Flow: tap Send → the Prayer screen opens (optional — type a prayer and tap
 /// its send icon, or just go back to skip) → back here → tap Send again to
-/// give. The offering is signed into the offline outbox exactly as before;
-/// only once that has succeeded is the prayer (if any) queued for the prayer
-/// team, so a failed offering never leaves an orphan prayer. Prayers are
-/// anonymous: nothing links them to the giver or to the offering.
+/// give. The offering is saved on the phone first; only once that has
+/// succeeded is the prayer (if any) queued, so a failed offering never leaves
+/// an orphan prayer. Then, if a collector is in range, both are handed over
+/// Bluetooth (GivingRelay) — Bahasha itself never uses the internet. Prayers
+/// are anonymous: nothing links them to the giver or to the offering.
 class SendScreen extends ConsumerStatefulWidget {
   const SendScreen({super.key, this.preview = false});
 
@@ -64,6 +67,14 @@ class _SendScreenState extends ConsumerState<SendScreen> with SingleTickerProvid
     _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
     if (!widget.preview) {
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(vendorPresenceProvider.notifier).scan());
+      // Once a collector is found, hand over anything already waiting on the
+      // phone (earlier offerings, prayers, a registration).
+      ref.listenManual<VendorPresence>(vendorPresenceProvider, (was, now) async {
+        if (now.status == VendorStatus.found && was?.status != VendorStatus.found) {
+          final relay = ref.read(givingRelayProvider);
+          if (await relay.hasWork()) unawaited(relay.drain());
+        }
+      });
     }
   }
 
@@ -110,11 +121,12 @@ class _SendScreenState extends ConsumerState<SendScreen> with SingleTickerProvid
       final user = await ref.read(localDatabaseProvider).currentUser();
       if (user == null) throw StateError('Please complete registration first');
       final total = basket.total;
-      await ref.read(contributionRepositoryProvider).createSigned(
+      // 1. Saved on the phone first — nothing is lost from here on.
+      await ref.read(contributionRepositoryProvider).createQueued(
             allocations: Map<String, int>.from(basket.amounts),
             user: user,
           );
-      // The offering is safely saved. Only now attach the prayer.
+      // 2. Only now attach the (anonymous) prayer.
       var prayerQueued = false;
       if (_prayer != null) {
         try {
@@ -125,15 +137,29 @@ class _SendScreenState extends ConsumerState<SendScreen> with SingleTickerProvid
       }
       ref.read(basketProvider.notifier).clear();
       ref.read(currentCategoryProvider.notifier).state = 'tithe';
+
+      // 3. Hand it to the church's collector over Bluetooth, if one is near.
+      var report = RelayReport.nothingToDo;
+      if (ref.read(vendorPresenceProvider).status == VendorStatus.found) {
+        report = await ref
+            .read(givingRelayProvider)
+            .drain()
+            .timeout(const Duration(seconds: 45), onTimeout: () => RelayReport.nothingToDo);
+      }
       navigator.pushReplacement(MaterialPageRoute(
-        builder: (_) => ThankYouScreen(total: total, prayerQueued: prayerQueued, prayerFailed: _prayer != null && !prayerQueued),
+        builder: (_) => ThankYouScreen(
+          total: total,
+          report: report,
+          prayerQueued: prayerQueued,
+          prayerFailed: _prayer != null && !prayerQueued,
+        ),
       ));
     } catch (e) {
       if (!mounted) return;
       setState(() => _phase = _Phase.failed);
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(designSnack(context, 'Your offering was not sent. Please tap Send to try again.', color: AppColors.red));
+        ..showSnackBar(designSnack(context, 'Your offering was not saved. Please tap Send to try again.', color: AppColors.red));
     }
   }
 

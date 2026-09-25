@@ -1,67 +1,100 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'ble_protocol.dart';
+import 'hub_protocol.dart';
 
-/// Outcome of a transmission attempt.
+/// Outcome of a transmission attempt (legacy single-status view of an ack).
 enum BleSendOutcome { accepted, duplicate, rejected, noHubFound, transportError }
 
-/// The giver-side BLE transport: find a church hub, hand it a signed
-/// contribution payload, and read back the delivery result.
+/// An open BLE session with one CVendor hub: read its challenge, then send
+/// messages one at a time, each answered by an ack notification. Abstract so
+/// the giving relay is unit-tested without radios.
+abstract class HubLink {
+  /// The hub's single-use challenge for this connection.
+  HubChallenge get challenge;
+
+  /// Write [message] (framed into chunks) and wait for the hub's ack.
+  Future<HubAck> send(Uint8List message, {Duration timeout});
+
+  Future<void> close();
+}
+
+/// Finds a hub and opens a [HubLink] to it.
+abstract class HubConnector {
+  /// Null when no hub is in range (or Bluetooth is off / not permitted).
+  Future<HubLink?> connect({Duration timeout});
+}
+
+/// The giver-side BLE transport (central role, flutter_reactive_ble).
 ///
-/// This is a transport only. It carries an already-signed (and, in production,
-/// encrypted-to-church-key) payload; it makes no security decisions. The
-/// authenticity of what it delivers is guaranteed by the device signature the
-/// backend verifies, not by anything that happens here — so a hostile hub can
-/// drop or delay a packet but cannot forge or alter one.
+/// This is a transport only. It carries already-signed payloads; it makes no
+/// security decisions. Authenticity is guaranteed by the device signature the
+/// backend verifies, so a hostile hub can drop or delay a packet but cannot
+/// forge or alter one.
 ///
 /// Hardware note: BLE cannot be exercised in a unit test or emulator; this is
-/// validated on physical devices. The framing and reassembly logic below is
-/// factored into pure functions ([frameChunks]/[parseAck]) so that part is
-/// tested without radios.
-class BleTransport {
+/// validated on physical devices. The framing logic ([frameChunks]/[parseAck])
+/// is pure and unit-tested.
+class BleTransport implements HubConnector {
   BleTransport({FlutterReactiveBle? ble}) : _ble = ble ?? FlutterReactiveBle();
 
   final FlutterReactiveBle _ble;
 
-  /// Scan for a hub, connect, hand over [payloadJson], and await the ack.
-  /// [timeout] bounds the whole exchange so a stalled radio doesn't hang the UI.
-  Future<BleSendOutcome> send({
-    required String payloadJson,
-    Duration timeout = const Duration(seconds: 30),
-  }) async {
-    StreamSubscription<ConnectionStateUpdate>? connSub;
-    final completer = Completer<BleSendOutcome>();
+  @override
+  Future<HubLink?> connect({Duration timeout = const Duration(seconds: 15)}) async {
+    if (!await _permissions()) return null;
+    final device = await _firstHub(timeout: timeout);
+    if (device == null) return null;
 
-    final timer = Timer(timeout, () {
-      if (!completer.isCompleted) completer.complete(BleSendOutcome.transportError);
+    final connected = Completer<bool>();
+    late final StreamSubscription<ConnectionStateUpdate> connSub;
+    connSub = _ble.connectToDevice(id: device.id, connectionTimeout: timeout).listen((u) {
+      if (u.connectionState == DeviceConnectionState.connected && !connected.isCompleted) connected.complete(true);
+      if (u.connectionState == DeviceConnectionState.disconnected && !connected.isCompleted) connected.complete(false);
+    }, onError: (_) {
+      if (!connected.isCompleted) connected.complete(false);
     });
 
+    final ok = await connected.future.timeout(timeout, onTimeout: () => false);
+    if (!ok) {
+      await connSub.cancel();
+      return null;
+    }
     try {
-      // 1. Scan for the first hub advertising our service.
-      final device = await _firstHub(timeout: timeout);
-      if (device == null) return BleSendOutcome.noHubFound;
+      // A bigger MTU means fewer, faster chunks; fall back to the BLE minimum.
+      var mtu = 23;
+      try {
+        mtu = await _ble.requestMtu(deviceId: device.id, mtu: 247);
+      } catch (_) {}
+      await _ble.discoverAllServices(device.id);
+      QualifiedCharacteristic ch(Uuid c) =>
+          QualifiedCharacteristic(serviceId: BleProtocol.serviceUuid, characteristicId: c, deviceId: device.id);
 
-      // 2. Connect.
-      connSub = _ble.connectToDevice(id: device.id, connectionTimeout: timeout).listen((update) async {
-        if (update.connectionState != DeviceConnectionState.connected) return;
-        try {
-          final outcome = await _exchange(device.id, payloadJson);
-          if (!completer.isCompleted) completer.complete(outcome);
-        } catch (_) {
-          if (!completer.isCompleted) completer.complete(BleSendOutcome.transportError);
-        }
-      }, onError: (_) {
-        if (!completer.isCompleted) completer.complete(BleSendOutcome.transportError);
-      });
-
-      return await completer.future;
+      // Subscribe to acks BEFORE writing anything, or a fast ack is missed.
+      final acks = StreamController<List<int>>.broadcast();
+      final ackSub = _ble.subscribeToCharacteristic(ch(BleProtocol.ackCharacteristic)).listen(acks.add, onError: acks.addError);
+      final challengeBytes = await _ble.readCharacteristic(ch(BleProtocol.challengeCharacteristic)).timeout(timeout);
+      final challenge = HubChallenge.parse(challengeBytes);
+      if (challenge == null) {
+        await ackSub.cancel();
+        await connSub.cancel();
+        return null;
+      }
+      return _BleHubLink(_ble, ch(BleProtocol.payloadCharacteristic), challenge, acks, ackSub, connSub, mtu);
     } catch (_) {
-      return BleSendOutcome.transportError;
-    } finally {
-      timer.cancel();
-      await connSub?.cancel();
+      await connSub.cancel();
+      return null;
+    }
+  }
+
+  Future<bool> _permissions() async {
+    try {
+      final r = await [Permission.bluetoothScan, Permission.bluetoothConnect, Permission.locationWhenInUse].request();
+      return (r[Permission.bluetoothScan]?.isGranted ?? false) || (r[Permission.locationWhenInUse]?.isGranted ?? false);
+    } catch (_) {
+      return false;
     }
   }
 
@@ -83,33 +116,6 @@ class BleTransport {
       timer.cancel();
       sub.cancel();
     });
-  }
-
-  Future<BleSendOutcome> _exchange(String deviceId, String payloadJson) async {
-    QualifiedCharacteristic ch(Uuid c) => QualifiedCharacteristic(
-          serviceId: BleProtocol.serviceUuid,
-          characteristicId: c,
-          deviceId: deviceId,
-        );
-
-    // Read the hub's transport challenge (liveness; the security nonce is
-    // already inside the signed payload).
-    await _ble.readCharacteristic(ch(BleProtocol.challengeCharacteristic));
-
-    // Write the payload in framed chunks.
-    final chunks = frameChunks(utf8.encode(payloadJson), BleProtocol.defaultChunkSize);
-    for (final chunk in chunks) {
-      await _ble.writeCharacteristicWithResponse(
-        ch(BleProtocol.payloadCharacteristic),
-        value: chunk,
-      );
-    }
-
-    // Await the ack notification.
-    final ackBytes = await _ble
-        .subscribeToCharacteristic(ch(BleProtocol.ackCharacteristic))
-        .firstWhere((v) => v.isNotEmpty);
-    return parseAck(ackBytes);
   }
 
   // --- Pure, unit-testable framing ------------------------------------------
@@ -146,5 +152,36 @@ class BleTransport {
       default:
         return BleSendOutcome.transportError;
     }
+  }
+}
+
+class _BleHubLink implements HubLink {
+  _BleHubLink(this._ble, this._payload, this.challenge, this._acks, this._ackSub, this._connSub, int mtu)
+      // ATT write payload is MTU − 3; each chunk must fit one write.
+      : _chunkSize = (mtu - 3).clamp(20, 512);
+
+  final FlutterReactiveBle _ble;
+  final QualifiedCharacteristic _payload;
+  @override
+  final HubChallenge challenge;
+  final StreamController<List<int>> _acks;
+  final StreamSubscription<List<int>> _ackSub;
+  final StreamSubscription<ConnectionStateUpdate> _connSub;
+  final int _chunkSize;
+
+  @override
+  Future<HubAck> send(Uint8List message, {Duration timeout = const Duration(seconds: 25)}) async {
+    final next = _acks.stream.firstWhere((v) => v.isNotEmpty).timeout(timeout);
+    for (final chunk in BleTransport.frameChunks(message, _chunkSize)) {
+      await _ble.writeCharacteristicWithResponse(_payload, value: chunk);
+    }
+    return HubAck.parse(await next);
+  }
+
+  @override
+  Future<void> close() async {
+    await _ackSub.cancel();
+    await _acks.close();
+    await _connSub.cancel(); // cancelling the connection stream disconnects
   }
 }

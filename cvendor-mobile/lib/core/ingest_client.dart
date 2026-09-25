@@ -59,6 +59,32 @@ class IngestClient {
         .toList();
   }
 
+  /// Relay a giver's registration (their phone is offline) to the backend's
+  /// existing POST /register — idempotent on clientUuid/deviceUuid, so a phone
+  /// that re-registers (e.g. after editing its number) updates the same user.
+  /// Returns the backend's user id, or throws [RegisterRefused] when the
+  /// backend rejects the details (4xx) and [IngestException] when it cannot
+  /// be reached.
+  Future<String> register(Map<String, dynamic> body) async {
+    final Response<dynamic> res;
+    try {
+      res = await _dio.post('/register', data: body);
+    } on DioException catch (e) {
+      throw IngestException('Backend unreachable: ${e.message}');
+    }
+    final code = res.statusCode ?? 0;
+    if ((code == 200 || code == 201) && res.data is Map && res.data['userId'] is String) {
+      return res.data['userId'] as String;
+    }
+    if (code >= 400 && code < 500) {
+      final data = res.data;
+      final error = data is Map ? data['error'] : null;
+      final message = error is Map ? error['message'] : null;
+      throw RegisterRefused(message is String ? message : 'Registration refused (HTTP $code)');
+    }
+    throw IngestException('Registration failed (HTTP $code)');
+  }
+
   /// Lightweight liveness ping; also refreshes the hub's status server-side.
   Future<bool> heartbeat() async {
     try {
@@ -79,4 +105,10 @@ class IngestException implements Exception {
 
 class IngestAuthException extends IngestException {
   IngestAuthException(super.message);
+}
+
+/// The backend refused a relayed registration (e.g. the phone number already
+/// belongs to another giver). Not retried; the phone is told.
+class RegisterRefused extends IngestException {
+  RegisterRefused(super.message);
 }
