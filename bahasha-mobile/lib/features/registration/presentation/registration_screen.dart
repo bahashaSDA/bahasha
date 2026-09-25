@@ -2,15 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/data/contribution_repository.dart';
+import '../../../core/design/icon.dart';
+import '../../../core/design/type.dart';
 import '../../../core/providers.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../contribution/presentation/home_screen.dart' show designSnack;
 
-/// First-time welcome + registration — one screen, no scrolling. We collect only
-/// what the system can't work out on its own: the giver's name, phone, and the
-/// church they belong to (their HOME church). Whether a given offering counts as
-/// a member or a visitor is decided automatically at giving time by comparing
-/// this home church with the church of the CVendor hub they hand to (known over
-/// Bluetooth) — so there is no "status" question here. New givers are secret by
-/// default; that can be changed later in the menu.
+/// First-time welcome + registration, in the keypad/wheel design language:
+/// white, Elms Sans, the centred title, the Settings pill, inputs drawn as
+/// the design's selected card (white, radius 17, #D9D9D9, blue when focused)
+/// and the blue "Continue" text action with the paper plane, as on Send.
+///
+/// We collect only what the system can't work out on its own: the giver's
+/// name, phone, and the church they belong to (their HOME church). Whether a
+/// given offering counts as a member or a visitor is decided automatically at
+/// giving time by comparing this home church with the church of the CVendor
+/// hub they hand to — so there is no "status" question here. Nothing goes
+/// online: the backend learns this giver through the hub over Bluetooth.
 class RegistrationScreen extends ConsumerStatefulWidget {
   const RegistrationScreen({super.key, required this.onComplete});
 
@@ -21,21 +29,12 @@ class RegistrationScreen extends ConsumerStatefulWidget {
 }
 
 class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
-  static const _green = Color(0xFF008805);
-  static const _ink = Colors.black;
-  static const _grey = Color(0xFF6B6B76);
-
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _church = TextEditingController();
   final _churchFocus = FocusNode();
   bool _submitting = false;
-
-  static const _welcomeFruits = <String>[
-    'assets/fruits/tithe.png', 'assets/fruits/offering.png',
-    'assets/fruits/camp_budget.png', 'assets/fruits/mission.png',
-  ];
 
   // Suggestions for the church autocomplete. Anything typed that isn't here is
   // still accepted and normalised to end with "SDA Church".
@@ -99,10 +98,10 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
       // CVendor hub over Bluetooth, the first time they give.
       ref.invalidate(currentUserProvider);
       widget.onComplete();
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save registration: $e')),
+          designSnack(context, 'Could not save your details. Please try again.', color: AppColors.red),
         );
         setState(() => _submitting = false);
       }
@@ -111,113 +110,144 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final s = size.width / 420;
+    // Short phones: less air above the title so the form fits without scrolling.
+    final top = size.height / s < 800 ? 48.0 : 110.0;
+
     return Scaffold(
       backgroundColor: Colors.white,
-      resizeToAvoidBottomInset: false,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                SizedBox(
-                  height: 64,
-                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    for (final f in _welcomeFruits)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: SizedBox(width: 54, height: 54, child: Image.asset(f, fit: BoxFit.contain)),
-                      ),
-                  ]),
-                ),
-                const SizedBox(height: 18),
-                const Text('Welcome to Bahasha',
-                    style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w300, fontSize: 27, color: _ink)),
-                const SizedBox(height: 8),
-                const Text(
-                  'Give to your church effortlessly — even with mobile data off. '
-                  'This is only asked once.',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 15, color: _grey, height: 1.4),
-                ),
-                const SizedBox(height: 26),
-
-                _label('Full name'),
-                _field(controller: _name, hint: 'e.g. Grace Wanjiru', keyboard: TextInputType.name,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your name' : null),
-                const SizedBox(height: 16),
-
-                _label('Phone number'),
-                _field(controller: _phone, hint: '07XX XXX XXX', keyboard: TextInputType.phone,
-                    formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
-                    validator: _validatePhone),
-                const SizedBox(height: 16),
-
-                _label('Church you belong to'),
-                RawAutocomplete<String>(
-                  textEditingController: _church,
-                  focusNode: _churchFocus,
-                  optionsBuilder: (value) {
-                    final q = _key(value.text);
-                    if (q.isEmpty) return const Iterable<String>.empty();
-                    return _churchSuggestions.where((c) => _key(c).contains(q));
-                  },
-                  fieldViewBuilder: (context, controller, focusNode, onSubmit) => TextFormField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    keyboardType: TextInputType.text,
-                    textCapitalization: TextCapitalization.words,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your church' : null,
-                    onFieldSubmitted: (_) => onSubmit(),
-                    style: const TextStyle(fontFamily: 'Inter', fontSize: 16, color: _ink),
-                    decoration: _decoration('Start typing, e.g. Zetech University'),
+        child: Form(
+          key: _formKey,
+          child: Column(children: [
+            Expanded(
+              child: SingleChildScrollView(
+                // Same 62px side margins as Settings: fields are 296 wide,
+                // the width of the design's selected-wheel card.
+                padding: EdgeInsets.fromLTRB(62 * s, top * s, 62 * s, 24 * s),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Text('Welcome to Bahasha', textAlign: TextAlign.center, style: BType.elms(24 * s)),
+                  SizedBox(height: 18 * s),
+                  // The Settings "Bahasha" pill (#F5F5F5, radius 29, padding 10).
+                  Center(
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 14 * s, vertical: 10 * s),
+                      decoration: BoxDecoration(color: AppColors.pill, borderRadius: BorderRadius.circular(29 * s)),
+                      child: Text('Only asked once', style: BType.elms(16 * s)),
+                    ),
                   ),
-                  optionsViewBuilder: (context, onSelected, options) => Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(14),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: 240, maxWidth: MediaQuery.of(context).size.width - 56),
-                        child: ListView(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          children: [
-                            for (final o in options)
-                              InkWell(
-                                onTap: () => onSelected(o),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Text(o, style: const TextStyle(fontFamily: 'Inter', fontSize: 15, color: _ink)),
-                                ),
-                              ),
-                          ],
+                  SizedBox(height: 22 * s),
+                  Text(
+                    'Give to your church with your mobile data off. Your offering goes to the church over Bluetooth.',
+                    textAlign: TextAlign.center,
+                    style: BType.elms(16 * s, color: AppColors.wheelGrey, height: 1.4),
+                  ),
+                  SizedBox(height: 44 * s),
+
+                  _label('Full name', s),
+                  _field(s,
+                      controller: _name,
+                      hint: 'e.g. Grace Wanjiru',
+                      keyboard: TextInputType.name,
+                      capitalization: TextCapitalization.words,
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your name' : null),
+                  SizedBox(height: 22 * s),
+
+                  _label('Phone number', s),
+                  _field(s,
+                      controller: _phone,
+                      hint: '07XX XXX XXX',
+                      keyboard: TextInputType.phone,
+                      formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
+                      validator: _validatePhone),
+                  SizedBox(height: 22 * s),
+
+                  _label('Church you belong to', s),
+                  RawAutocomplete<String>(
+                    textEditingController: _church,
+                    focusNode: _churchFocus,
+                    optionsBuilder: (value) {
+                      final q = _key(value.text);
+                      if (q.isEmpty) return const Iterable<String>.empty();
+                      return _churchSuggestions.where((c) => _key(c).contains(q));
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onSubmit) => TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      keyboardType: TextInputType.text,
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your church' : null,
+                      onFieldSubmitted: (_) => onSubmit(),
+                      cursorColor: AppColors.blue,
+                      style: BType.elms(18 * s),
+                      decoration: _decoration('e.g. Zetech University', s),
+                    ),
+                    optionsViewBuilder: (context, onSelected, options) => Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          margin: EdgeInsets.only(top: 6 * s),
+                          constraints: BoxConstraints(maxHeight: 240 * s, maxWidth: 296 * s),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(17 * s),
+                            border: Border.all(color: AppColors.cardBorder),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(17 * s),
+                            child: ListView(
+                              padding: EdgeInsets.symmetric(vertical: 6 * s),
+                              shrinkWrap: true,
+                              children: [
+                                for (final o in options)
+                                  InkWell(
+                                    onTap: () => onSelected(o),
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 20 * s, vertical: 12 * s),
+                                      child: Text(o, style: BType.elms(16 * s)),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-
-                const Spacer(),
-                GestureDetector(
-                  onTap: _submitting ? null : _submit,
-                  child: Container(
-                    height: 56,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(62)),
-                    child: _submitting
-                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Continue',
-                            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 18, color: Colors.white)),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Center(child: Text('© 2026 Bahasha',
-                    style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: Color(0x73000000)))),
-              ],
+                ]),
+              ),
             ),
-          ),
+
+            // The design's text action, as on Send: "Continue" (Elms Sans
+            // Light 24, blue) at x 89 with the paper plane at x 304.
+            Semantics(
+              button: true,
+              label: 'Continue',
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _submitting ? null : _submit,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(89 * s, 14 * s, (420 - 304 - 36) * s, 10 * s),
+                  child: Row(children: [
+                    Text(_submitting ? 'Saving…' : 'Continue', style: BType.elms(24 * s, color: AppColors.blue)),
+                    const Spacer(),
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _submitting ? 0.35 : 1,
+                      child: DesignIcon('send', scale: s, size: 36, tint: false),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(bottom: 14 * s),
+              child: Text('© 2026 Bahasha', style: BType.elms(13 * s, color: AppColors.wheelGrey)),
+            ),
+          ]),
         ),
       ),
     );
@@ -229,36 +259,50 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
     return ContributionRepository.normalizeMsisdn(v) != null ? null : 'Enter a valid Kenyan mobile number';
   }
 
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Text(text, style: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 15, color: _ink)),
+  Widget _label(String text, double s) => Padding(
+        padding: EdgeInsets.only(bottom: 10 * s),
+        child: Text(text, style: BType.elms(16 * s)),
       );
 
-  Widget _field({
+  Widget _field(
+    double s, {
     required TextEditingController controller,
     required String hint,
     TextInputType? keyboard,
+    TextCapitalization capitalization = TextCapitalization.none,
     List<TextInputFormatter>? formatters,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboard,
+      textCapitalization: capitalization,
       inputFormatters: formatters,
       validator: validator,
-      style: const TextStyle(fontFamily: 'Inter', fontSize: 16, color: _ink),
-      decoration: _decoration(hint),
+      cursorColor: AppColors.blue,
+      style: BType.elms(18 * s),
+      decoration: _decoration(hint, s),
     );
   }
 
-  InputDecoration _decoration(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(fontFamily: 'Inter', color: Color(0x80000000)),
-        filled: true,
-        fillColor: const Color(0xFFF5F5F7),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _green, width: 1.5)),
-      );
+  /// The design's card: white, radius 17, #D9D9D9 border; blue when focused.
+  InputDecoration _decoration(String hint, double s) {
+    OutlineInputBorder border(Color c) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17 * s),
+          borderSide: BorderSide(color: c, width: 1),
+        );
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: BType.elms(18 * s, color: AppColors.placeholder),
+      errorStyle: BType.elms(14 * s, color: AppColors.red),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: EdgeInsets.symmetric(horizontal: 22 * s, vertical: 20 * s),
+      border: border(AppColors.cardBorder),
+      enabledBorder: border(AppColors.cardBorder),
+      focusedBorder: border(AppColors.blue),
+      errorBorder: border(AppColors.red),
+      focusedErrorBorder: border(AppColors.red),
+    );
+  }
 }
