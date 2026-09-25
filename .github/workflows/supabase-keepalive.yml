@@ -1,0 +1,50 @@
+name: Keep Supabase awake
+
+# Supabase's free tier pauses a project after 7 days without database
+# activity. This runs every day and makes a real database query through the
+# live backend's public GET /api/v1/churches (it reads the churches table), so
+# the project never goes idle. No secrets needed.
+#
+# GitHub also switches OFF scheduled workflows in a repo with no activity for
+# 60 days. The last step re-enables this workflow each run, which resets that
+# clock, so it keeps going on its own.
+#
+# If a ping fails (backend down, Supabase paused), the run fails and GitHub
+# e-mails the repo owner. Run it by hand: Actions → "Keep Supabase awake" →
+# Run workflow.
+
+on:
+  schedule:
+    - cron: "17 5 * * *" # daily, 08:17 Nairobi time
+  workflow_dispatch:
+
+permissions:
+  actions: write # to re-enable this workflow (see above)
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query the database through the backend
+        env:
+          URL: https://bahasha-backend.vercel.app/api/v1/churches
+        run: |
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o body.json -w "%{http_code}" --max-time 30 "$URL" || echo 000)
+            if [ "$code" = "200" ] && grep -q '"churches"' body.json; then
+              echo "OK: database answered (attempt $attempt)."
+              exit 0
+            fi
+            echo "Attempt $attempt: HTTP $code — retrying in 20s"
+            sleep 20
+          done
+          echo "::error::Backend/Supabase did not answer. If Supabase is paused, restore it in the dashboard."
+          exit 1
+
+      - name: Keep this schedule from being auto-disabled
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"
