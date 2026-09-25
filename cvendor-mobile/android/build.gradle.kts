@@ -16,12 +16,13 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    // Force compileSdk 35 on every Android module (plugins declare older ones
-    // whose androidx deps require API 34+). Registered before evaluationDependsOn
+    // Force compileSdk 36 on every Android module (plugins declare older ones;
+    // androidx.core 1.17 / androidx.browser 1.9 require API 36, same as the
+    // Bahasha app). Registered before evaluationDependsOn
     // forces evaluation, or Gradle throws "already evaluated".
     afterEvaluate {
         extensions.findByType(com.android.build.gradle.BaseExtension::class.java)?.apply {
-            compileSdkVersion(35)
+            compileSdkVersion(36)
         }
     }
     project.evaluationDependsOn(":app")
